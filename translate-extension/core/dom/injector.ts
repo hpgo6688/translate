@@ -1,27 +1,49 @@
 import type { ContentScriptContext } from 'wxt/utils/content-script-context';
 
-import { mountTranslationShadow } from '@/core/dom/shadow-host';
+import { mountTranslationShadow, unmountTranslationShadow } from '@/core/dom/shadow-host';
 
 export type DisplayMode = 'below' | 'side-by-side' | 'replace';
 
 const WRAPPER_ATTR = 'data-translation-wrapper';
+const INLINE_LINK_SELECTOR = 'a[href]';
 
-export function preserveInlineFormatting(
-  source: HTMLElement,
-  translatedText: string,
-): string {
-  const hasInlineTags = source.querySelector('a,em,strong,code');
-  if (!hasInlineTags) {
-    return translatedText;
+function applySafeAnchorAttributes(from: HTMLAnchorElement, to: HTMLAnchorElement): void {
+  const href = from.getAttribute('href');
+  if (href && href.trim() !== '') {
+    to.setAttribute('href', href);
   }
-  const anchor = source.querySelector('a');
-  if (!anchor) {
-    return translatedText;
+  const target = from.getAttribute('target');
+  if (target && target.trim() !== '') {
+    to.setAttribute('target', target);
   }
-  return `<a href="${anchor.getAttribute('href') ?? '#'}">${translatedText}</a>`;
+  const rel = from.getAttribute('rel');
+  if (rel && rel.trim() !== '') {
+    to.setAttribute('rel', rel);
+  }
 }
 
-function buildContentHtml(source: HTMLElement, text: string): string {
+function buildFormattedNode(source: HTMLElement, translatedText: string): Node {
+  const anchor = source.querySelector(INLINE_LINK_SELECTOR);
+  if (!(anchor instanceof HTMLAnchorElement)) {
+    return document.createTextNode(translatedText);
+  }
+  const translatedAnchor = document.createElement('a');
+  applySafeAnchorAttributes(anchor, translatedAnchor);
+  translatedAnchor.textContent = translatedText;
+  return translatedAnchor;
+}
+
+export function preserveInlineFormatting(source: HTMLElement, translatedText: string): string {
+  const node = buildFormattedNode(source, translatedText);
+  if (node.nodeType === Node.TEXT_NODE) {
+    return translatedText;
+  }
+  const container = document.createElement('div');
+  container.append(node);
+  return container.innerHTML;
+}
+
+function buildContentElement(source: HTMLElement, text: string): HTMLElement {
   const rootStyle = getComputedStyle(document.documentElement);
   const color = rootStyle.getPropertyValue('--translate-ext-color').trim() || '#334155';
   const backgroundColor =
@@ -30,21 +52,22 @@ function buildContentHtml(source: HTMLElement, text: string): string {
   const fontScaleFactor = Number.parseFloat(fontScale) / 100 || 1;
   const decoration = rootStyle.getPropertyValue('--translate-ext-decoration').trim();
   const blur = rootStyle.getPropertyValue('--translate-ext-blur').trim() || '0px';
-  const formattedText = preserveInlineFormatting(source, text);
-
-  const baseStyle = [
-    `color:${color}`,
-    `background-color:${backgroundColor}`,
-    `font-size:${fontScaleFactor}em`,
-    `filter:blur(${blur === '0px' ? '0px' : blur})`,
-    'display:block',
-    'line-height:1.6',
-    'margin-top:0.25rem',
-  ];
+  const content = document.createElement('div');
+  content.className = 'translation-content';
+  content.style.color = color;
+  content.style.backgroundColor = backgroundColor;
+  content.style.fontSize = `${fontScaleFactor}em`;
+  content.style.filter = `blur(${blur === '0px' ? '0px' : blur})`;
+  content.style.display = 'block';
+  content.style.lineHeight = '1.6';
+  content.style.marginTop = '0.25rem';
+  content.append(buildFormattedNode(source, text));
 
   if (decoration === 'dashed-box') {
-    baseStyle.push('text-decoration:none', `border:1px dashed ${color}`, 'padding:0.25rem 0.375rem');
-    return `<div class="translation-content" style="${baseStyle.join(';')}">${formattedText}</div>`;
+    content.style.textDecoration = 'none';
+    content.style.border = `1px dashed ${color}`;
+    content.style.padding = '0.25rem 0.375rem';
+    return content;
   }
 
   const line = decoration === 'none' ? 'none' : 'underline';
@@ -54,12 +77,10 @@ function buildContentHtml(source: HTMLElement, text: string): string {
       : decoration === 'wavy-underline'
         ? 'wavy'
         : 'solid';
-  baseStyle.push(
-    `text-decoration-line:${line}`,
-    `text-decoration-style:${line === 'none' ? 'solid' : style}`,
-    `text-decoration-color:${color}`,
-  );
-  return `<div class="translation-content" style="${baseStyle.join(';')}">${formattedText}</div>`;
+  content.style.textDecorationLine = line;
+  content.style.textDecorationStyle = line === 'none' ? 'solid' : style;
+  content.style.textDecorationColor = color;
+  return content;
 }
 
 function ensureWrapper(element: HTMLElement, id: string, mode: DisplayMode): HTMLElement {
@@ -111,6 +132,26 @@ export async function injectTranslation(
     ctx,
     input.id,
     wrapper,
-    buildContentHtml(input.element, input.translation),
+    buildContentElement(input.element, input.translation),
   );
+}
+
+export function removeTranslation(
+  input: {
+    id: string;
+    element: HTMLElement;
+    mode: DisplayMode;
+  },
+): void {
+  unmountTranslationShadow(input.id);
+  if (input.mode === 'replace') {
+    input.element.style.display = '';
+  }
+  if (input.mode !== 'below') {
+    return;
+  }
+  const wrapper = input.element.nextElementSibling as HTMLElement | null;
+  if (wrapper && wrapper.getAttribute(WRAPPER_ATTR) === input.id) {
+    wrapper.remove();
+  }
 }

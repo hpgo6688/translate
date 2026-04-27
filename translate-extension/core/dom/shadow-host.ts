@@ -8,11 +8,11 @@ export async function mountTranslationShadow(
   ctx: Parameters<typeof createShadowRootUi>[0],
   id: string,
   anchor: HTMLElement,
-  content: string,
+  content: Node,
 ): Promise<void> {
   const existing = mountedById.get(id);
   if (existing) {
-    existing.uiContainer.innerHTML = content;
+    existing.uiContainer.replaceChildren(content);
     return;
   }
 
@@ -21,9 +21,18 @@ export async function mountTranslationShadow(
     position: 'inline',
     anchor,
     onMount(container) {
-      container.innerHTML = content;
+      container.replaceChildren(content);
     },
   });
   ui.mount();
   mountedById.set(id, ui);
+}
+
+export function unmountTranslationShadow(id: string): void {
+  const existing = mountedById.get(id);
+  if (!existing) {
+    return;
+  }
+  existing.remove();
+  mountedById.delete(id);
 }

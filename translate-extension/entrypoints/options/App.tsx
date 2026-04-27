@@ -16,6 +16,7 @@ import { setupI18n } from '@/utils/i18n';
 import { onMessage, sendMessage } from '@/utils/messaging';
 
 type Route = 'general' | 'display' | 'shortcuts' | 'providers' | 'cache' | 'about';
+const hoverHotkeyOptions = ['Option', 'Control', 'Shift'] as const;
 
 type ExtensionChrome = {
   runtime: {
@@ -235,6 +236,14 @@ export default function App() {
       {route === 'shortcuts' && (
         <form className="space-y-2" onSubmit={submitShortcuts}>
           <input {...shortcutsForm.register('toggleTranslation')} className="w-full rounded border p-2" />
+          <label className="block text-sm font-medium">Hover translate hotkey</label>
+          <select {...shortcutsForm.register('hoverTranslateHotkey')} className="w-full rounded border p-2">
+            {hoverHotkeyOptions.map((keyName) => (
+              <option key={keyName} value={keyName}>
+                {keyName}
+              </option>
+            ))}
+          </select>
           {shortcutWarning ? <p className="text-xs text-amber-700">{shortcutWarning}</p> : null}
           <button className="rounded bg-slate-900 px-3 py-1 text-white">Save Shortcuts</button>
         </form>

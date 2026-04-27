@@ -23,6 +23,7 @@ export const displaySchema = z.object({
 
 export const shortcutsSchema = z.object({
   toggleTranslation: z.string().min(1),
+  hoverTranslateHotkey: z.string().min(1),
 });
 
 export const cacheSchema = z.object({
@@ -87,6 +88,7 @@ const initialSettings: SettingsState = {
   },
   shortcuts: {
     toggleTranslation: 'Alt+A',
+    hoverTranslateHotkey: 'Option',
   },
   providers: {
     google: { enabled: true, requiresKey: false },

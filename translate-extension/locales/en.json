@@ -1,0 +1,10 @@
+{
+  "common.appName": "Translate Extension",
+  "common.save": "Save",
+  "common.cancel": "Cancel",
+  "popup.title": "Translation",
+  "popup.enableCurrentTab": "Enable for current tab",
+  "options.title": "Settings",
+  "unlock.title": "Unlock provider keys",
+  "unlock.password": "Master password"
+}

@@ -1,0 +1,10 @@
+{
+  "common.appName": "翻译扩展",
+  "common.save": "保存",
+  "common.cancel": "取消",
+  "popup.title": "翻译",
+  "popup.enableCurrentTab": "启用当前标签页翻译",
+  "options.title": "设置",
+  "unlock.title": "解锁 Provider 密钥",
+  "unlock.password": "主密码"
+}

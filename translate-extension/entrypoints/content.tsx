@@ -197,18 +197,18 @@ function getSelectionProviderLabel(providerId: string): string {
 function resolveSelectionCardFontSize(text: string): number {
   const length = text.trim().length;
   if (length <= 24) {
-    return 28;
-  }
-  if (length <= 48) {
     return 24;
   }
-  if (length <= 96) {
+  if (length <= 48) {
     return 20;
   }
-  if (length <= 180) {
+  if (length <= 96) {
     return 18;
   }
-  return 16;
+  if (length <= 180) {
+    return 16;
+  }
+  return 14;
 }
 
 function applySelectionCardBodyTypography(text: string): void {
@@ -233,7 +233,7 @@ function showSelectionTranslation(text: string, x: number, y: number): void {
   }
   selectionCardBodyElement.textContent = text;
   applySelectionCardBodyTypography(text);
-  card.style.display = 'block';
+  card.style.display = 'flex';
   if (selectionCardPinned) {
     card.style.opacity = '1';
     return;
@@ -295,6 +295,7 @@ function ensureSelectionCard(): HTMLDivElement | null {
   card.style.left = '12px';
   card.style.top = '12px';
   card.style.width = '420px';
+  card.style.height = '260px';
   card.style.maxWidth = 'calc(100vw - 16px)';
   card.style.minHeight = '180px';
   card.style.background = '#ffffff';
@@ -305,6 +306,7 @@ function ensureSelectionCard(): HTMLDivElement | null {
   card.style.overflow = 'hidden';
   card.style.display = 'none';
   card.style.opacity = '0';
+  card.style.flexDirection = 'column';
 
   const header = document.createElement('div');
   header.style.display = 'flex';
@@ -498,6 +500,9 @@ function ensureSelectionCard(): HTMLDivElement | null {
   body.style.lineHeight = '1.35';
   body.style.whiteSpace = 'pre-wrap';
   body.style.wordBreak = 'break-word';
+  body.style.flex = '1';
+  body.style.overflowY = 'auto';
+  body.style.minHeight = '0';
 
   const footer = document.createElement('div');
   footer.style.display = 'flex';
@@ -533,6 +538,27 @@ function ensureSelectionCard(): HTMLDivElement | null {
 
   card.append(header, body, footer);
   document.body.append(card);
+
+  const minCardWidth = 320;
+  const minCardHeight = 180;
+  const viewportPadding = 8;
+
+  const clampCardSizeAndPosition = () => {
+    const rawWidth = Number.parseFloat(card.style.width || `${card.offsetWidth}`);
+    const rawHeight = Number.parseFloat(card.style.height || `${card.offsetHeight}`);
+    const maxWidth = Math.max(minCardWidth, window.innerWidth - viewportPadding * 2);
+    const maxHeight = Math.max(minCardHeight, window.innerHeight - viewportPadding * 2);
+    const nextWidth = Math.max(minCardWidth, Math.min(maxWidth, rawWidth));
+    const nextHeight = Math.max(minCardHeight, Math.min(maxHeight, rawHeight));
+    card.style.width = `${nextWidth}px`;
+    card.style.height = `${nextHeight}px`;
+    const rawLeft = Number.parseFloat(card.style.left || '0');
+    const rawTop = Number.parseFloat(card.style.top || '0');
+    const maxLeft = Math.max(viewportPadding, window.innerWidth - nextWidth - viewportPadding);
+    const maxTop = Math.max(viewportPadding, window.innerHeight - nextHeight - viewportPadding);
+    card.style.left = `${Math.max(viewportPadding, Math.min(maxLeft, rawLeft))}px`;
+    card.style.top = `${Math.max(viewportPadding, Math.min(maxTop, rawTop))}px`;
+  };
 
   let dragging = false;
   let startX = 0;
@@ -576,6 +602,114 @@ function ensureSelectionCard(): HTMLDivElement | null {
     window.addEventListener('mouseup', stopDrag);
     event.preventDefault();
   });
+
+  type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  const addResizeHandle = (corner: ResizeCorner) => {
+    const handle = document.createElement('div');
+    handle.setAttribute('data-resize-corner', corner);
+    handle.style.position = 'absolute';
+    handle.style.width = '12px';
+    handle.style.height = '12px';
+    handle.style.zIndex = '2';
+    handle.style.background = 'transparent';
+    if (corner === 'top-left') {
+      handle.style.left = '0';
+      handle.style.top = '0';
+      handle.style.cursor = 'nwse-resize';
+    }
+    if (corner === 'top-right') {
+      handle.style.right = '0';
+      handle.style.top = '0';
+      handle.style.cursor = 'nesw-resize';
+    }
+    if (corner === 'bottom-left') {
+      handle.style.left = '0';
+      handle.style.bottom = '0';
+      handle.style.cursor = 'nesw-resize';
+    }
+    if (corner === 'bottom-right') {
+      handle.style.right = '0';
+      handle.style.bottom = '0';
+      handle.style.cursor = 'nwse-resize';
+    }
+
+    let resizing = false;
+    let startMouseX = 0;
+    let startMouseY = 0;
+    let startLeft = 0;
+    let startTop = 0;
+    let startWidth = 0;
+    let startHeight = 0;
+
+    const onResizeMove = (event: MouseEvent) => {
+      if (!resizing) {
+        return;
+      }
+      const deltaX = event.clientX - startMouseX;
+      const deltaY = event.clientY - startMouseY;
+      let nextLeft = startLeft;
+      let nextTop = startTop;
+      let nextWidth = startWidth;
+      let nextHeight = startHeight;
+
+      if (corner === 'top-left') {
+        nextWidth = startWidth - deltaX;
+        nextHeight = startHeight - deltaY;
+        nextLeft = startLeft + deltaX;
+        nextTop = startTop + deltaY;
+      } else if (corner === 'top-right') {
+        nextWidth = startWidth + deltaX;
+        nextHeight = startHeight - deltaY;
+        nextTop = startTop + deltaY;
+      } else if (corner === 'bottom-left') {
+        nextWidth = startWidth - deltaX;
+        nextHeight = startHeight + deltaY;
+        nextLeft = startLeft + deltaX;
+      } else {
+        nextWidth = startWidth + deltaX;
+        nextHeight = startHeight + deltaY;
+      }
+
+      card.style.left = `${nextLeft}px`;
+      card.style.top = `${nextTop}px`;
+      card.style.width = `${nextWidth}px`;
+      card.style.height = `${nextHeight}px`;
+      clampCardSizeAndPosition();
+    };
+
+    const stopResize = () => {
+      if (!resizing) {
+        return;
+      }
+      resizing = false;
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onResizeMove);
+      window.removeEventListener('mouseup', stopResize);
+      clampCardToViewportWithAnimation(card);
+    };
+
+    handle.addEventListener('mousedown', (event) => {
+      resizing = true;
+      startMouseX = event.clientX;
+      startMouseY = event.clientY;
+      startLeft = Number.parseFloat(card.style.left || '0');
+      startTop = Number.parseFloat(card.style.top || '0');
+      startWidth = Number.parseFloat(card.style.width || `${card.offsetWidth}`);
+      startHeight = Number.parseFloat(card.style.height || `${card.offsetHeight}`);
+      document.body.style.userSelect = 'none';
+      window.addEventListener('mousemove', onResizeMove);
+      window.addEventListener('mouseup', stopResize);
+      event.preventDefault();
+      event.stopPropagation();
+    });
+
+    card.append(handle);
+  };
+  addResizeHandle('top-left');
+  addResizeHandle('top-right');
+  addResizeHandle('bottom-left');
+  addResizeHandle('bottom-right');
+  clampCardSizeAndPosition();
 
   selectionCardElement = card;
   selectionCardBodyElement = body;

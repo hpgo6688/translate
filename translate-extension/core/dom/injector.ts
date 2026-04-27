@@ -22,7 +22,44 @@ export function preserveInlineFormatting(
 }
 
 function buildContentHtml(source: HTMLElement, text: string): string {
-  return `<div class="translation-content">${preserveInlineFormatting(source, text)}</div>`;
+  const rootStyle = getComputedStyle(document.documentElement);
+  const color = rootStyle.getPropertyValue('--translate-ext-color').trim() || '#334155';
+  const backgroundColor =
+    rootStyle.getPropertyValue('--translate-ext-background').trim() || 'transparent';
+  const fontScale = rootStyle.getPropertyValue('--translate-ext-font-scale').trim() || '100%';
+  const fontScaleFactor = Number.parseFloat(fontScale) / 100 || 1;
+  const decoration = rootStyle.getPropertyValue('--translate-ext-decoration').trim();
+  const blur = rootStyle.getPropertyValue('--translate-ext-blur').trim() || '0px';
+  const formattedText = preserveInlineFormatting(source, text);
+
+  const baseStyle = [
+    `color:${color}`,
+    `background-color:${backgroundColor}`,
+    `font-size:${fontScaleFactor}em`,
+    `filter:blur(${blur === '0px' ? '0px' : blur})`,
+    'display:block',
+    'line-height:1.6',
+    'margin-top:0.25rem',
+  ];
+
+  if (decoration === 'dashed-box') {
+    baseStyle.push('text-decoration:none', `border:1px dashed ${color}`, 'padding:0.25rem 0.375rem');
+    return `<div class="translation-content" style="${baseStyle.join(';')}">${formattedText}</div>`;
+  }
+
+  const line = decoration === 'none' ? 'none' : 'underline';
+  const style =
+    decoration === 'dashed-underline'
+      ? 'dashed'
+      : decoration === 'wavy-underline'
+        ? 'wavy'
+        : 'solid';
+  baseStyle.push(
+    `text-decoration-line:${line}`,
+    `text-decoration-style:${line === 'none' ? 'solid' : style}`,
+    `text-decoration-color:${color}`,
+  );
+  return `<div class="translation-content" style="${baseStyle.join(';')}">${formattedText}</div>`;
 }
 
 function ensureWrapper(element: HTMLElement, id: string, mode: DisplayMode): HTMLElement {

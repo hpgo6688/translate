@@ -56,6 +56,7 @@ describe('storage convergence', () => {
       display: {
         displayMode: 'below',
         color: '#334155',
+        backgroundColor: '#ffffff',
         fontScale: 100,
         decoration: 'none',
         blurPx: 0,
@@ -81,6 +82,7 @@ describe('storage convergence', () => {
         display: {
           displayMode: 'side-by-side',
           color: '#0f172a',
+          backgroundColor: '#f8fafc',
           fontScale: 95,
           decoration: 'underline',
           blurPx: 0,
@@ -88,6 +90,7 @@ describe('storage convergence', () => {
       },
       translationStyle: {
         color: '#0f172a',
+        backgroundColor: '#f8fafc',
         fontScale: 95,
         decoration: 'underline',
         blurPx: 0,

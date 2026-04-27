@@ -98,10 +98,12 @@ export default defineBackground(() => {
     try {
       const maybeSender = message as unknown as { sender?: { tab?: { id?: number } } };
       const tabId = maybeSender.sender?.tab?.id ?? message.data.tabId;
+      const provider = getProvider(message.data.providerId);
       if (tabId == null) {
         throw new Error('Missing tab id');
       }
       if (
+        provider.requiresKey &&
         masterPasswordManager.getKey() == null &&
         (await providerKeyStore.hasEncryptedKeys())
       ) {

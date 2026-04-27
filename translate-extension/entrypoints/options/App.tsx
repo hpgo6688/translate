@@ -35,6 +35,7 @@ export default function App() {
   const [route, setRoute] = useState<Route>('general');
   const [shortcutWarning, setShortcutWarning] = useState<string | null>(null);
   const [unlockBannerVisible, setUnlockBannerVisible] = useState(false);
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const settings = useSettingsStore();
 
   const nav = useMemo(
@@ -71,6 +72,10 @@ export default function App() {
   const runAsync = (task: () => Promise<void>): void => {
     void task();
   };
+  const reportSaveResult = (ok: boolean): void => {
+    setSaveNotice(ok ? 'Saved.' : 'Save failed: invalid values.');
+    setTimeout(() => setSaveNotice(null), 1600);
+  };
   useEffect(() => {
     return onMessage('NEEDS_UNLOCK', () => {
       setUnlockBannerVisible(true);
@@ -80,7 +85,8 @@ export default function App() {
     event.preventDefault();
     void generalForm.handleSubmit((values) => {
       runAsync(async () => {
-        await settings.update({ general: values });
+        const ok = await settings.update({ general: values });
+        reportSaveResult(ok);
       });
     })(event);
   };
@@ -88,7 +94,8 @@ export default function App() {
     event.preventDefault();
     void displayForm.handleSubmit((values) => {
       runAsync(async () => {
-        await settings.update({ display: values });
+        const ok = await settings.update({ display: values });
+        reportSaveResult(ok);
       });
     })(event);
   };
@@ -112,7 +119,8 @@ export default function App() {
             setShortcutWarning(null);
           }
         }
-        await settings.update({ shortcuts: values });
+        const ok = await settings.update({ shortcuts: values });
+        reportSaveResult(ok);
       });
     })(event);
   };
@@ -120,7 +128,8 @@ export default function App() {
     event.preventDefault();
     void cacheForm.handleSubmit((values) => {
       runAsync(async () => {
-        await settings.update({ cache: values });
+        const ok = await settings.update({ cache: values });
+        reportSaveResult(ok);
       });
     })(event);
   };
@@ -157,6 +166,11 @@ export default function App() {
         </div>
       )}
       <h1 className="mb-4 text-xl font-semibold">Options</h1>
+      {saveNotice ? (
+        <p className="mb-3 rounded border border-emerald-300 bg-emerald-50 p-2 text-sm text-emerald-800">
+          {saveNotice}
+        </p>
+      ) : null}
       <div className="mb-4 flex gap-2">
         {nav.map(([id, label]) => (
           <button
@@ -192,7 +206,20 @@ export default function App() {
             <option value="replace">replace</option>
           </select>
           <input {...displayForm.register('color')} placeholder="#334155" className="w-full rounded border p-2" />
-          <input type="number" {...displayForm.register('fontScale', { valueAsNumber: true })} className="w-full rounded border p-2" />
+          <input
+            {...displayForm.register('backgroundColor')}
+            placeholder="transparent (leave empty)"
+            className="w-full rounded border p-2"
+          />
+          <input
+            type="number"
+            min={50}
+            max={150}
+            step={1}
+            {...displayForm.register('fontScale', { valueAsNumber: true })}
+            className="w-full rounded border p-2"
+            placeholder="Font scale 50-150"
+          />
           <select {...displayForm.register('decoration')} className="w-full rounded border p-2">
             <option value="none">none</option>
             <option value="underline">underline</option>

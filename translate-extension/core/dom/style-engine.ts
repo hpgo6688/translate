@@ -3,6 +3,7 @@ const STYLE_PREFIX = '--translate-ext';
 
 export type TranslationStyle = {
   color: string;
+  backgroundColor: string;
   fontScale: number;
   decoration: 'none' | 'underline' | 'dashed-underline' | 'wavy-underline' | 'dashed-box';
   blurPx: number;
@@ -10,6 +11,7 @@ export type TranslationStyle = {
 
 export const defaultTranslationStyle: TranslationStyle = {
   color: '#334155',
+  backgroundColor: 'transparent',
   fontScale: 100,
   decoration: 'none',
   blurPx: 0,
@@ -40,6 +42,7 @@ export function applyStyleVariables(style: TranslationStyle): void {
     return;
   }
   root.style.setProperty(`${STYLE_PREFIX}-color`, style.color);
+  root.style.setProperty(`${STYLE_PREFIX}-background`, style.backgroundColor);
   root.style.setProperty(`${STYLE_PREFIX}-font-scale`, `${style.fontScale}%`);
   root.style.setProperty(`${STYLE_PREFIX}-decoration`, style.decoration);
   root.style.setProperty(`${STYLE_PREFIX}-blur`, `${style.blurPx}px`);

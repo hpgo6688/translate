@@ -1,6 +1,7 @@
 import '@/assets/tailwind.css';
 import { assignParagraphIds } from '@/core/dom/paragraph-id';
 import { injectTranslation } from '@/core/dom/injector';
+import type { DisplayMode } from '@/core/dom/injector';
 import { observeDomChanges } from '@/core/dom/observer';
 import { applyStyleVariables, defaultTranslationStyle, listenStyleChanges } from '@/core/dom/style-engine';
 import { observeInViewport } from '@/core/dom/viewport';
@@ -15,7 +16,7 @@ type ParagraphState = {
 };
 
 const paragraphById = new Map<string, ParagraphState>();
-const currentMode: 'below' | 'side-by-side' | 'replace' = 'below';
+let currentMode: DisplayMode = 'below';
 
 type RuntimeMessage = {
   type: string;
@@ -31,6 +32,11 @@ type ExtensionChrome = {
       addListener: (listener: (message: RuntimeMessage) => void) => void;
     };
   };
+  storage: {
+    sync: {
+      get: (keys: string | string[]) => Promise<Record<string, unknown>>;
+    };
+  };
 };
 
 function getChrome(): ExtensionChrome {
@@ -39,6 +45,10 @@ function getChrome(): ExtensionChrome {
     throw new Error('Chrome extension API unavailable');
   }
   return extensionChrome;
+}
+
+function isDisplayMode(value: unknown): value is DisplayMode {
+  return value === 'below' || value === 'side-by-side' || value === 'replace';
 }
 
 async function scanAndQueue() {
@@ -71,8 +81,51 @@ export default defineContentScript({
   allFrames: false,
   cssInjectionMode: 'ui',
   async main(ctx) {
+    const initial = await getChrome().storage.sync.get('translationStyle');
+    const initialStyle = initial.translationStyle as
+      | {
+          displayMode?: unknown;
+          color?: string;
+          backgroundColor?: string;
+          fontScale?: number;
+          decoration?: string;
+          blurPx?: number;
+        }
+      | undefined;
+    if (isDisplayMode(initialStyle?.displayMode)) {
+      currentMode = initialStyle.displayMode;
+    }
     applyStyleVariables(defaultTranslationStyle);
-    const stopStyleSync = listenStyleChanges((nextStyle) => applyStyleVariables(nextStyle));
+    if (initialStyle) {
+      applyStyleVariables({
+        color: typeof initialStyle.color === 'string' ? initialStyle.color : defaultTranslationStyle.color,
+        backgroundColor:
+          typeof initialStyle.backgroundColor === 'string' &&
+          initialStyle.backgroundColor.trim() !== ''
+            ? initialStyle.backgroundColor
+            : defaultTranslationStyle.backgroundColor,
+        fontScale:
+          typeof initialStyle.fontScale === 'number'
+            ? initialStyle.fontScale
+            : defaultTranslationStyle.fontScale,
+        decoration:
+          initialStyle.decoration === 'underline' ||
+          initialStyle.decoration === 'dashed-underline' ||
+          initialStyle.decoration === 'wavy-underline' ||
+          initialStyle.decoration === 'dashed-box'
+            ? initialStyle.decoration
+            : defaultTranslationStyle.decoration,
+        blurPx:
+          typeof initialStyle.blurPx === 'number' ? initialStyle.blurPx : defaultTranslationStyle.blurPx,
+      });
+    }
+    const stopStyleSync = listenStyleChanges((nextStyle) => {
+      applyStyleVariables(nextStyle);
+      const maybeDisplayMode = (nextStyle as unknown as { displayMode?: unknown }).displayMode;
+      if (isDisplayMode(maybeDisplayMode)) {
+        currentMode = maybeDisplayMode;
+      }
+    });
 
     await mountFloatingButton(ctx, {
       onTranslate: () => {

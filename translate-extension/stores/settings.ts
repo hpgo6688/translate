@@ -12,6 +12,10 @@ export const generalSchema = z.object({
 export const displaySchema = z.object({
   displayMode: z.enum(['below', 'side-by-side', 'replace']),
   color: z.string().min(4),
+  backgroundColor: z.string().transform((value) => {
+    const normalized = value.trim();
+    return normalized === '' ? 'transparent' : normalized;
+  }),
   fontScale: z.number().min(50).max(150),
   decoration: z.enum(['none', 'underline', 'dashed-underline', 'wavy-underline', 'dashed-box']),
   blurPx: z.number().min(0).max(20),
@@ -76,6 +80,7 @@ const initialSettings: SettingsState = {
   display: {
     displayMode: 'below',
     color: '#334155',
+    backgroundColor: 'transparent',
     fontScale: 100,
     decoration: 'none',
     blurPx: 0,

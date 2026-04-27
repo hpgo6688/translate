@@ -49,6 +49,7 @@ let currentMode: DisplayMode = 'below';
 let hoverRequestSeq = 0;
 let selectionRequestSeq = 0;
 let hoverLoadingStyleReady = false;
+let selectionCardStyleReady = false;
 
 type RuntimeMessage = {
   type: string;
@@ -220,6 +221,36 @@ function applySelectionCardBodyTypography(text: string): void {
   selectionCardBodyElement.style.lineHeight = fontSize <= 18 ? '1.5' : '1.35';
 }
 
+function ensureSelectionCardStyle(): void {
+  if (selectionCardStyleReady) {
+    return;
+  }
+  const style = document.createElement('style');
+  style.textContent = `
+    [data-translate-selection-card-body] {
+      scrollbar-width: thin;
+      scrollbar-color: #cbd5e1 #f1f5f9;
+    }
+    [data-translate-selection-card-body]::-webkit-scrollbar {
+      width: 10px;
+    }
+    [data-translate-selection-card-body]::-webkit-scrollbar-track {
+      background: #f1f5f9;
+      border-radius: 9999px;
+    }
+    [data-translate-selection-card-body]::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+      border: 2px solid #f1f5f9;
+    }
+    [data-translate-selection-card-body]::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  `;
+  document.head.append(style);
+  selectionCardStyleReady = true;
+}
+
 function updateSelectionCardProviderUI(): void {
   if (selectionCardServiceLabelElement) {
     selectionCardServiceLabelElement.textContent = getSelectionProviderLabel(selectionCardProviderId);
@@ -289,6 +320,7 @@ function ensureSelectionCard(): HTMLDivElement | null {
   if (selectionCardElement?.isConnected) {
     return selectionCardElement;
   }
+  ensureSelectionCardStyle();
   const card = document.createElement('div');
   card.setAttribute('data-translate-selection-card', 'true');
   card.style.position = 'fixed';
@@ -503,6 +535,7 @@ function ensureSelectionCard(): HTMLDivElement | null {
   body.style.flex = '1';
   body.style.overflowY = 'auto';
   body.style.minHeight = '0';
+  body.setAttribute('data-translate-selection-card-body', 'true');
 
   const footer = document.createElement('div');
   footer.style.display = 'flex';

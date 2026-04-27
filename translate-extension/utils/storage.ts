@@ -32,7 +32,7 @@ const syncStorageArea = defineExtensionStorage<SyncStorageSchema>(
   extensionChrome!.storage.sync as Parameters<typeof defineExtensionStorage>[0],
 );
 
-export const storage = {
+export const extensionStorage = {
   local: localStorageArea,
   sync: syncStorageArea,
 };

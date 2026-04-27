@@ -1,3 +1,4 @@
+import '@/assets/tailwind.css';
 import { assignParagraphIds } from '@/core/dom/paragraph-id';
 import { injectTranslation } from '@/core/dom/injector';
 import { observeDomChanges } from '@/core/dom/observer';

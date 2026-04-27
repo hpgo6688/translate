@@ -35,6 +35,10 @@ const hoverLoadingTimeoutById = new Map<string, number>();
 const hoverLoadingPositionRestore = new WeakMap<HTMLElement, string>();
 const selectionRequestById = new Map<string, { x: number; y: number }>();
 let selectionActionButton: HTMLButtonElement | null = null;
+let selectionCardElement: HTMLDivElement | null = null;
+let selectionCardBodyElement: HTMLDivElement | null = null;
+let selectionCardPinButton: HTMLButtonElement | null = null;
+let selectionCardPinned = false;
 const translatedParagraphIds = new Set<string>();
 let currentMode: DisplayMode = 'below';
 let hoverRequestSeq = 0;
@@ -176,32 +180,199 @@ function isSelectionMode(value: unknown): value is 'direct' | 'icon' | 'mini-ico
 }
 
 function showSelectionTranslation(text: string, x: number, y: number): void {
-  const existing = document.querySelector('[data-translate-selection-result]');
-  if (existing) {
-    existing.remove();
+  const card = ensureSelectionCard();
+  if (!card || !selectionCardBodyElement) {
+    return;
   }
-  const panel = document.createElement('div');
-  panel.setAttribute('data-translate-selection-result', 'true');
-  panel.style.position = 'fixed';
-  panel.style.left = `${Math.max(8, Math.min(window.innerWidth - 320, x))}px`;
-  panel.style.top = `${Math.max(8, Math.min(window.innerHeight - 120, y + 8))}px`;
-  panel.style.maxWidth = '320px';
-  panel.style.padding = '8px 10px';
-  panel.style.borderRadius = '8px';
-  panel.style.background = '#0f172a';
-  panel.style.color = '#f8fafc';
-  panel.style.fontSize = '12px';
-  panel.style.lineHeight = '1.45';
-  panel.style.boxShadow = '0 8px 24px rgba(15, 23, 42, 0.24)';
-  panel.style.zIndex = '2147483647';
-  panel.style.whiteSpace = 'pre-wrap';
-  panel.textContent = text;
-  document.body.append(panel);
+  selectionCardBodyElement.textContent = text;
+  card.style.display = 'block';
+  if (selectionCardPinned) {
+    card.style.opacity = '1';
+    return;
+  }
+  const width = card.offsetWidth || 360;
+  const height = card.offsetHeight || 170;
+  const maxLeft = Math.max(8, window.innerWidth - width - 8);
+  const maxTop = Math.max(8, window.innerHeight - height - 8);
+  card.style.left = `${Math.max(8, Math.min(maxLeft, x))}px`;
+  card.style.top = `${Math.max(8, Math.min(maxTop, y + 8))}px`;
+  card.style.opacity = '1';
+}
+
+function updatePinButtonStyle(): void {
+  if (!selectionCardPinButton) {
+    return;
+  }
+  selectionCardPinButton.textContent = selectionCardPinned ? 'Unpin' : 'Pin';
+  selectionCardPinButton.style.background = selectionCardPinned ? '#2563eb' : '#eef2ff';
+  selectionCardPinButton.style.color = selectionCardPinned ? '#ffffff' : '#1e3a8a';
+}
+
+function closeSelectionCard(): void {
+  if (!selectionCardElement) {
+    return;
+  }
+  selectionCardElement.style.display = 'none';
+}
+
+function clampCardToViewportWithAnimation(card: HTMLDivElement): void {
+  const width = card.offsetWidth;
+  const height = card.offsetHeight;
+  const maxLeft = Math.max(8, window.innerWidth - width - 8);
+  const maxTop = Math.max(8, window.innerHeight - height - 8);
+  const rawLeft = Number.parseFloat(card.style.left || '0');
+  const rawTop = Number.parseFloat(card.style.top || '0');
+  const nextLeft = Math.max(8, Math.min(maxLeft, rawLeft));
+  const nextTop = Math.max(8, Math.min(maxTop, rawTop));
+  if (nextLeft === rawLeft && nextTop === rawTop) {
+    return;
+  }
+  card.style.transition = 'left 180ms cubic-bezier(0.22, 1, 0.36, 1), top 180ms cubic-bezier(0.22, 1, 0.36, 1)';
+  card.style.left = `${nextLeft}px`;
+  card.style.top = `${nextTop}px`;
   window.setTimeout(() => {
-    if (panel.isConnected) {
-      panel.remove();
+    if (selectionCardElement === card) {
+      card.style.transition = '';
     }
-  }, 10000);
+  }, 220);
+}
+
+function ensureSelectionCard(): HTMLDivElement | null {
+  if (selectionCardElement?.isConnected) {
+    return selectionCardElement;
+  }
+  const card = document.createElement('div');
+  card.setAttribute('data-translate-selection-card', 'true');
+  card.style.position = 'fixed';
+  card.style.left = '12px';
+  card.style.top = '12px';
+  card.style.width = '360px';
+  card.style.maxWidth = 'calc(100vw - 16px)';
+  card.style.minHeight = '120px';
+  card.style.background = '#ffffff';
+  card.style.border = '1px solid rgba(148, 163, 184, 0.28)';
+  card.style.borderRadius = '14px';
+  card.style.boxShadow = '0 20px 40px rgba(15, 23, 42, 0.16)';
+  card.style.zIndex = '2147483647';
+  card.style.overflow = 'hidden';
+  card.style.display = 'none';
+  card.style.opacity = '0';
+
+  const header = document.createElement('div');
+  header.style.display = 'flex';
+  header.style.alignItems = 'center';
+  header.style.justifyContent = 'space-between';
+  header.style.gap = '8px';
+  header.style.padding = '10px 12px';
+  header.style.background = '#f8fafc';
+  header.style.borderBottom = '1px solid rgba(148, 163, 184, 0.18)';
+  header.style.cursor = 'move';
+
+  const title = document.createElement('div');
+  title.textContent = 'Translation';
+  title.style.fontSize = '13px';
+  title.style.fontWeight = '600';
+  title.style.color = '#0f172a';
+
+  const actions = document.createElement('div');
+  actions.style.display = 'inline-flex';
+  actions.style.alignItems = 'center';
+  actions.style.gap = '6px';
+
+  const pinButton = document.createElement('button');
+  pinButton.type = 'button';
+  pinButton.style.height = '24px';
+  pinButton.style.padding = '0 8px';
+  pinButton.style.border = 'none';
+  pinButton.style.borderRadius = '9999px';
+  pinButton.style.fontSize = '11px';
+  pinButton.style.cursor = 'pointer';
+  pinButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    selectionCardPinned = !selectionCardPinned;
+    updatePinButtonStyle();
+  });
+  selectionCardPinButton = pinButton;
+  updatePinButtonStyle();
+
+  const closeButton = document.createElement('button');
+  closeButton.type = 'button';
+  closeButton.textContent = 'x';
+  closeButton.style.width = '24px';
+  closeButton.style.height = '24px';
+  closeButton.style.border = 'none';
+  closeButton.style.borderRadius = '9999px';
+  closeButton.style.background = '#e2e8f0';
+  closeButton.style.color = '#334155';
+  closeButton.style.fontSize = '12px';
+  closeButton.style.cursor = 'pointer';
+  closeButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeSelectionCard();
+  });
+
+  actions.append(pinButton, closeButton);
+  header.append(title, actions);
+
+  const body = document.createElement('div');
+  body.style.padding = '12px';
+  body.style.color = '#111827';
+  body.style.fontSize = '14px';
+  body.style.lineHeight = '1.6';
+  body.style.whiteSpace = 'pre-wrap';
+  body.style.wordBreak = 'break-word';
+
+  card.append(header, body);
+  document.body.append(card);
+
+  let dragging = false;
+  let startX = 0;
+  let startY = 0;
+  let cardStartLeft = 0;
+  let cardStartTop = 0;
+
+  const onDragMove = (event: MouseEvent) => {
+    if (!dragging) {
+      return;
+    }
+    const deltaX = event.clientX - startX;
+    const deltaY = event.clientY - startY;
+    card.style.left = `${cardStartLeft + deltaX}px`;
+    card.style.top = `${cardStartTop + deltaY}px`;
+  };
+
+  const stopDrag = () => {
+    if (!dragging) {
+      return;
+    }
+    dragging = false;
+    document.body.style.userSelect = '';
+    window.removeEventListener('mousemove', onDragMove);
+    window.removeEventListener('mouseup', stopDrag);
+    clampCardToViewportWithAnimation(card);
+  };
+
+  header.addEventListener('mousedown', (event) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('button')) {
+      return;
+    }
+    dragging = true;
+    startX = event.clientX;
+    startY = event.clientY;
+    cardStartLeft = Number.parseFloat(card.style.left || '0');
+    cardStartTop = Number.parseFloat(card.style.top || '0');
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', onDragMove);
+    window.addEventListener('mouseup', stopDrag);
+    event.preventDefault();
+  });
+
+  selectionCardElement = card;
+  selectionCardBodyElement = body;
+  return card;
 }
 
 function removeSelectionActionButton(): void {
@@ -546,7 +717,16 @@ export default defineContentScript({
         segments: [{ id: requestId, text }],
       });
     };
-    const mouseupListener = () => {
+    const mouseupListener = (event: MouseEvent) => {
+      const targetNode = event.target as Node | null;
+      if (targetNode) {
+        if (selectionCardElement?.contains(targetNode)) {
+          return;
+        }
+        if (selectionActionButton?.contains(targetNode)) {
+          return;
+        }
+      }
       if (!popupSelectionEnabled) {
         removeSelectionActionButton();
         return;
@@ -601,11 +781,35 @@ export default defineContentScript({
         removeSelectionActionButton();
       }
     };
+    const pointerDownOutsideCardListener = (event: PointerEvent) => {
+      if (selectionCardPinned || !selectionCardElement || selectionCardElement.style.display === 'none') {
+        return;
+      }
+      const targetNode = event.target as Node | null;
+      if (!targetNode) {
+        closeSelectionCard();
+        return;
+      }
+      if (selectionCardElement.contains(targetNode)) {
+        return;
+      }
+      if (selectionActionButton && selectionActionButton.contains(targetNode)) {
+        return;
+      }
+      closeSelectionCard();
+    };
+    const resizeListener = () => {
+      if (selectionCardElement && selectionCardElement.style.display !== 'none') {
+        clampCardToViewportWithAnimation(selectionCardElement);
+      }
+    };
     document.addEventListener('mousemove', pointerListener, { passive: true });
     document.addEventListener('keydown', keydownListener);
     document.addEventListener('mouseup', mouseupListener);
     document.addEventListener('keydown', selectionHotkeyListener);
     document.addEventListener('selectionchange', selectionChangeListener);
+    document.addEventListener('pointerdown', pointerDownOutsideCardListener, true);
+    window.addEventListener('resize', resizeListener);
 
     await mountFloatingButton(ctx, {
       onTranslate: () => {
@@ -685,7 +889,16 @@ export default defineContentScript({
       document.removeEventListener('mouseup', mouseupListener);
       document.removeEventListener('keydown', selectionHotkeyListener);
       document.removeEventListener('selectionchange', selectionChangeListener);
+      document.removeEventListener('pointerdown', pointerDownOutsideCardListener, true);
+      window.removeEventListener('resize', resizeListener);
       removeSelectionActionButton();
+      if (selectionCardElement) {
+        selectionCardElement.remove();
+      }
+      selectionCardElement = null;
+      selectionCardBodyElement = null;
+      selectionCardPinButton = null;
+      selectionCardPinned = false;
       getChrome().storage.onChanged.removeListener(storageListener);
     };
   },

@@ -29,8 +29,12 @@ type ShortcutSettings = {
 const paragraphById = new Map<string, ParagraphState>();
 const hoverRequestById = new Map<string, HTMLElement>();
 const hoverIdByElement = new WeakMap<HTMLElement, string>();
+const hoverLoadingById = new Map<string, HTMLSpanElement>();
+const hoverLoadingTimeoutById = new Map<string, number>();
+const hoverLoadingPositionRestore = new WeakMap<HTMLElement, string>();
 let currentMode: DisplayMode = 'below';
 let hoverRequestSeq = 0;
+let hoverLoadingStyleReady = false;
 
 type RuntimeMessage = {
   type: string;
@@ -165,6 +169,78 @@ function resolveHoverTarget(target: EventTarget | null): HTMLElement | null {
     return null;
   }
   return target;
+}
+
+function ensureHoverLoadingStyle(): void {
+  if (hoverLoadingStyleReady) {
+    return;
+  }
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes translate-ext-hover-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+  `;
+  document.head.append(style);
+  hoverLoadingStyleReady = true;
+}
+
+function attachHoverLoading(target: HTMLElement, id: string): void {
+  ensureHoverLoadingStyle();
+  detachHoverLoading(id);
+  if (getComputedStyle(target).position === 'static') {
+    hoverLoadingPositionRestore.set(target, target.style.position);
+    target.style.position = 'relative';
+  }
+  const spinner = document.createElement('span');
+  spinner.setAttribute('data-translate-hover-loading', id);
+  spinner.setAttribute('aria-hidden', 'true');
+  spinner.style.position = 'absolute';
+  spinner.style.right = '-6px';
+  spinner.style.top = '50%';
+  spinner.style.width = '12px';
+  spinner.style.height = '12px';
+  spinner.style.marginTop = '-6px';
+  spinner.style.border = '2px solid rgba(148, 163, 184, 0.45)';
+  spinner.style.borderTopColor = '#475569';
+  spinner.style.borderRadius = '9999px';
+  spinner.style.pointerEvents = 'none';
+  spinner.style.zIndex = '2147483647';
+  spinner.style.animation = 'translate-ext-hover-spin 0.8s linear infinite';
+  target.append(spinner);
+  hoverLoadingById.set(id, spinner);
+  const timeoutId = window.setTimeout(() => {
+    detachHoverLoading(id);
+    hoverRequestById.delete(id);
+  }, 15000);
+  hoverLoadingTimeoutById.set(id, timeoutId);
+}
+
+function detachHoverLoading(id: string): void {
+  const spinner = hoverLoadingById.get(id);
+  const timeoutId = hoverLoadingTimeoutById.get(id);
+  if (timeoutId !== undefined) {
+    window.clearTimeout(timeoutId);
+    hoverLoadingTimeoutById.delete(id);
+  }
+  if (!spinner) {
+    return;
+  }
+  const host = spinner.parentElement;
+  spinner.remove();
+  hoverLoadingById.delete(id);
+  if (!host) {
+    return;
+  }
+  const nextRestore = hoverLoadingPositionRestore.get(host);
+  if (nextRestore === undefined) {
+    return;
+  }
+  if (!host.querySelector('[data-translate-hover-loading]')) {
+    host.style.position = nextRestore;
+    hoverLoadingPositionRestore.delete(host);
+  }
 }
 
 export default defineContentScript({
@@ -305,6 +381,8 @@ export default defineContentScript({
       }
       event.preventDefault();
       if (activeHoverTarget === currentHoverTarget && activeHoverRequestId) {
+        detachHoverLoading(activeHoverRequestId);
+        hoverRequestById.delete(activeHoverRequestId);
         removeTranslation({
           id: activeHoverRequestId,
           element: activeHoverTarget,
@@ -320,15 +398,16 @@ export default defineContentScript({
         requestId = `hover-${hoverRequestSeq}`;
         hoverIdByElement.set(currentHoverTarget, requestId);
       }
-      hoverRequestById.set(requestId, currentHoverTarget);
-      activeHoverTarget = currentHoverTarget;
-      activeHoverRequestId = requestId;
       const hoverText = currentHoverTarget.innerText.trim();
       if (!hoverText) {
         activeHoverTarget = null;
         activeHoverRequestId = null;
         return;
       }
+      hoverRequestById.set(requestId, currentHoverTarget);
+      attachHoverLoading(currentHoverTarget, requestId);
+      activeHoverTarget = currentHoverTarget;
+      activeHoverRequestId = requestId;
       void sendMessage('TRANSLATE_BATCH', {
         sourceLang,
         targetLang,
@@ -372,6 +451,7 @@ export default defineContentScript({
       const hoverTarget = hoverRequestById.get(message.payload.id);
       if (hoverTarget) {
         hoverRequestById.delete(message.payload.id);
+        detachHoverLoading(message.payload.id);
         void injectTranslation(ctx, {
           id: message.payload.id,
           element: hoverTarget,
@@ -401,6 +481,9 @@ export default defineContentScript({
     return () => {
       stopStyleSync();
       stopObserve();
+      for (const id of hoverLoadingById.keys()) {
+        detachHoverLoading(id);
+      }
       document.removeEventListener('mousemove', pointerListener);
       document.removeEventListener('keydown', keydownListener);
       getChrome().storage.onChanged.removeListener(storageListener);

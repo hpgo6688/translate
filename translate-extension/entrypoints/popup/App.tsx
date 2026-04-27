@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 
-import { LanguageSelect } from '@/components/ui/language-select';
 import { PopupSwitch } from '@/components/ui/popup-switch';
+import { SearchableSelect, type SelectOption } from '@/components/ui/searchable-select';
 import { masterPasswordManager } from '@/core/keystore/master-password';
 import { usePopupStore } from '@/stores/popup';
 import { onMessage, sendMessage } from '@/utils/messaging';
@@ -58,6 +58,25 @@ function App() {
     ],
     [],
   );
+  const sourceLangOptions = useMemo<SelectOption[]>(
+    () => [
+      { value: 'auto', label: 'Auto Detect' },
+      { value: 'en', label: 'English' },
+      { value: 'zh-CN', label: 'Simplified Chinese (简体中文)' },
+      { value: 'zh-TW', label: 'Traditional Chinese (Taiwan) (繁體中文-台灣)' },
+      { value: 'zh-HK', label: 'Traditional Chinese (Hong Kong) (繁體中文-香港)' },
+      { value: 'ja', label: 'Japanese (日本語)' },
+      { value: 'ko', label: 'Korean (한국어)' },
+      { value: 'es', label: 'Spanish (Español)' },
+      { value: 'de', label: 'German (Deutsch)' },
+    ],
+    [],
+  );
+  const targetLangOptions = useMemo<SelectOption[]>(
+    () => sourceLangOptions.filter((item) => item.value !== 'auto'),
+    [sourceLangOptions],
+  );
+
   useEffect(() => {
     const remove = onMessage('NEEDS_UNLOCK', () => {
       setShowUnlock(true);
@@ -83,8 +102,9 @@ function App() {
       <section className="popup-card popup-primary-flow">
         <div className="language-pair">
           <label className="field-block pair-item">
-            <LanguageSelect
+            <SearchableSelect
               value={sourceLang}
+              options={sourceLangOptions}
               onChange={(next) => {
                 setSourceLang(next);
               }}
@@ -92,9 +112,9 @@ function App() {
           </label>
           <div className="pair-arrow">→</div>
           <label className="field-block pair-item">
-            <LanguageSelect
-              mode="target"
+            <SearchableSelect
               value={targetLang}
+              options={targetLangOptions}
               dropdownAlign="right"
               onChange={(next) => {
                 void setTargetLang(next);

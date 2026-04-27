@@ -57,7 +57,7 @@ export const usePopupStore = create<PopupState>()(
       targetLang: 'zh-CN',
       providerId: 'google',
       selectionEnabled: false,
-      selectionMode: 'mini-icon',
+      selectionMode: 'direct',
       sessionChars: 0,
       cacheHitRate: 0,
       async setEnabled(enabled) {

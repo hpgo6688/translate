@@ -227,6 +227,10 @@ function ensureSelectionCardStyle(): void {
   }
   const style = document.createElement('style');
   style.textContent = `
+    [data-translate-selection-card],
+    [data-translate-selection-card] div {
+      opacity: 1 !important;
+    }
     [data-translate-selection-card-body] {
       scrollbar-width: thin;
       scrollbar-color: #cbd5e1 #f1f5f9;
@@ -266,7 +270,6 @@ function showSelectionTranslation(text: string, x: number, y: number): void {
   applySelectionCardBodyTypography(text);
   card.style.display = 'flex';
   if (selectionCardPinned) {
-    card.style.opacity = '1';
     return;
   }
   const width = card.offsetWidth || 360;
@@ -275,7 +278,6 @@ function showSelectionTranslation(text: string, x: number, y: number): void {
   const maxTop = Math.max(8, window.innerHeight - height - 8);
   card.style.left = `${Math.max(8, Math.min(maxLeft, x))}px`;
   card.style.top = `${Math.max(8, Math.min(maxTop, y + 8))}px`;
-  card.style.opacity = '1';
 }
 
 function updatePinButtonStyle(): void {
@@ -337,7 +339,6 @@ function ensureSelectionCard(): HTMLDivElement | null {
   card.style.zIndex = '2147483647';
   card.style.overflow = 'hidden';
   card.style.display = 'none';
-  card.style.opacity = '0';
   card.style.flexDirection = 'column';
 
   const header = document.createElement('div');
@@ -349,6 +350,8 @@ function ensureSelectionCard(): HTMLDivElement | null {
   header.style.background = '#ffffff';
   header.style.borderBottom = '1px solid rgba(148, 163, 184, 0.18)';
   header.style.cursor = 'move';
+  header.style.position = 'relative';
+  header.style.zIndex = '5';
 
   const brand = document.createElement('div');
   brand.textContent = '⇄';
@@ -366,6 +369,7 @@ function ensureSelectionCard(): HTMLDivElement | null {
   const servicePickerWrap = document.createElement('div');
   servicePickerWrap.style.position = 'relative';
   servicePickerWrap.style.flex = '1';
+  servicePickerWrap.style.zIndex = '6';
 
   const servicePickerButton = document.createElement('button');
   selectionCardServiceButtonElement = servicePickerButton;
@@ -408,7 +412,7 @@ function ensureSelectionCard(): HTMLDivElement | null {
   serviceMenu.style.boxShadow = '0 12px 30px rgba(15, 23, 42, 0.15)';
   serviceMenu.style.padding = '6px';
   serviceMenu.style.display = 'none';
-  serviceMenu.style.zIndex = '2147483647';
+  serviceMenu.style.zIndex = '7';
   selectionCardServiceMenuElement = serviceMenu;
 
   for (const option of SELECTION_CARD_PROVIDER_OPTIONS) {
@@ -636,34 +640,65 @@ function ensureSelectionCard(): HTMLDivElement | null {
     event.preventDefault();
   });
 
-  type ResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
-  const addResizeHandle = (corner: ResizeCorner) => {
+  type ResizeHandle = 'left' | 'right' | 'bottom' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  const addResizeHandle = (handleType: ResizeHandle) => {
     const handle = document.createElement('div');
-    handle.setAttribute('data-resize-corner', corner);
+    handle.setAttribute('data-resize-handle', handleType);
     handle.style.position = 'absolute';
-    handle.style.width = '12px';
-    handle.style.height = '12px';
-    handle.style.zIndex = '2';
     handle.style.background = 'transparent';
-    if (corner === 'top-left') {
+    handle.style.zIndex = '2';
+    if (handleType === 'left') {
+      handle.style.left = '0';
+      handle.style.top = '52px';
+      handle.style.bottom = '10px';
+      handle.style.width = '10px';
+      handle.style.cursor = 'ew-resize';
+    }
+    if (handleType === 'right') {
+      handle.style.right = '0';
+      handle.style.top = '52px';
+      handle.style.bottom = '10px';
+      handle.style.width = '10px';
+      handle.style.cursor = 'ew-resize';
+    }
+    if (handleType === 'bottom') {
+      handle.style.left = '10px';
+      handle.style.right = '10px';
+      handle.style.bottom = '0';
+      handle.style.height = '10px';
+      handle.style.cursor = 'ns-resize';
+    }
+    if (handleType === 'top-left') {
       handle.style.left = '0';
       handle.style.top = '0';
+      handle.style.width = '12px';
+      handle.style.height = '12px';
       handle.style.cursor = 'nwse-resize';
+      handle.style.zIndex = '3';
     }
-    if (corner === 'top-right') {
+    if (handleType === 'top-right') {
       handle.style.right = '0';
       handle.style.top = '0';
+      handle.style.width = '12px';
+      handle.style.height = '12px';
       handle.style.cursor = 'nesw-resize';
+      handle.style.zIndex = '3';
     }
-    if (corner === 'bottom-left') {
+    if (handleType === 'bottom-left') {
       handle.style.left = '0';
       handle.style.bottom = '0';
+      handle.style.width = '12px';
+      handle.style.height = '12px';
       handle.style.cursor = 'nesw-resize';
+      handle.style.zIndex = '3';
     }
-    if (corner === 'bottom-right') {
+    if (handleType === 'bottom-right') {
       handle.style.right = '0';
       handle.style.bottom = '0';
+      handle.style.width = '12px';
+      handle.style.height = '12px';
       handle.style.cursor = 'nwse-resize';
+      handle.style.zIndex = '3';
     }
 
     let resizing = false;
@@ -685,16 +720,23 @@ function ensureSelectionCard(): HTMLDivElement | null {
       let nextWidth = startWidth;
       let nextHeight = startHeight;
 
-      if (corner === 'top-left') {
+      if (handleType === 'left') {
+        nextWidth = startWidth - deltaX;
+        nextLeft = startLeft + deltaX;
+      } else if (handleType === 'right') {
+        nextWidth = startWidth + deltaX;
+      } else if (handleType === 'bottom') {
+        nextHeight = startHeight + deltaY;
+      } else if (handleType === 'top-left') {
         nextWidth = startWidth - deltaX;
         nextHeight = startHeight - deltaY;
         nextLeft = startLeft + deltaX;
         nextTop = startTop + deltaY;
-      } else if (corner === 'top-right') {
+      } else if (handleType === 'top-right') {
         nextWidth = startWidth + deltaX;
         nextHeight = startHeight - deltaY;
         nextTop = startTop + deltaY;
-      } else if (corner === 'bottom-left') {
+      } else if (handleType === 'bottom-left') {
         nextWidth = startWidth - deltaX;
         nextHeight = startHeight + deltaY;
         nextLeft = startLeft + deltaX;
@@ -738,6 +780,9 @@ function ensureSelectionCard(): HTMLDivElement | null {
 
     card.append(handle);
   };
+  addResizeHandle('left');
+  addResizeHandle('right');
+  addResizeHandle('bottom');
   addResizeHandle('top-left');
   addResizeHandle('top-right');
   addResizeHandle('bottom-left');

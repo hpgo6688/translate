@@ -5,12 +5,14 @@ import { splitByCache } from '@/core/orchestrator/cache-filter';
 import { OrchestratorQueue } from '@/core/orchestrator/queue';
 import { withProviderRetry } from '@/core/orchestrator/retry';
 import { streamToTab } from '@/core/orchestrator/streamer';
+import type { TranslationSegment } from '@/core/translators/base';
 import { getProvider } from '@/core/translators';
 import { usageMeter } from '@/core/usage/meter';
-import { sendMessage, onMessage, type TranslateBatchMessage } from '@/utils/messaging';
+import { sendMessage, onMessage, type TranslateBatchMessage, type TranslateTextMessage } from '@/utils/messaging';
 
 const queue = new OrchestratorQueue(4, 50, 10);
 const pendingUnlockBatches: Array<{ input: TranslateBatchMessage; tabId: number }> = [];
+const pendingUnlockTexts: TranslateTextMessage[] = [];
 
 type ExtensionChrome = {
   tabs: {
@@ -81,6 +83,52 @@ async function handleTranslateBatch(
   return { accepted: true };
 }
 
+async function translateTextViaPipeline(input: TranslateTextMessage): Promise<string> {
+  const provider = getProvider(input.providerId);
+  const segments: TranslationSegment[] = [{ id: 'side-panel', text: input.text }];
+  const { hits, misses } = await splitByCache({
+    provider: provider.id,
+    sourceLang: input.sourceLang,
+    targetLang: input.targetLang,
+    segments,
+  });
+
+  if (hits.length > 0) {
+    return hits[0]?.cache.translation ?? '';
+  }
+
+  if (provider.requiresKey && masterPasswordManager.getKey() == null && (await providerKeyStore.hasEncryptedKeys())) {
+    throw new Error('NEEDS_UNLOCK');
+  }
+
+  const apiKey = provider.requiresKey ? await providerKeyStore.getProviderKey(provider.id) : undefined;
+  const stream = await withProviderRetry(() =>
+    Promise.resolve(
+      provider.translate(segments, {
+        sourceLang: input.sourceLang,
+        targetLang: input.targetLang,
+        signal: new AbortController().signal,
+        apiKey: apiKey ?? undefined,
+      }),
+    ),
+  );
+
+  let translatedText = '';
+  for await (const chunk of stream) {
+    if (chunk.id === 'side-panel') {
+      translatedText += chunk.text;
+    }
+  }
+
+  await usageMeter.increment({
+    provider: provider.id,
+    charsSubmitted: input.text.length,
+    success: true,
+  });
+
+  return translatedText;
+}
+
 export default defineBackground(() => {
   void providerKeyStore.init();
   onMessage('UNLOCK_RESULT', async (message) => {
@@ -92,6 +140,7 @@ export default defineBackground(() => {
     for (const item of pending) {
       await handleTranslateBatch(item.input, item.tabId);
     }
+    pendingUnlockTexts.splice(0, pendingUnlockTexts.length);
   });
 
   onMessage('TRANSLATE_BATCH', async (message) => {
@@ -119,6 +168,18 @@ export default defineBackground(() => {
         if (tabId != null) {
           pendingUnlockBatches.push({ input: message.data, tabId });
         }
+        await sendMessage('NEEDS_UNLOCK', { reason: 'missing_master_key' });
+      }
+      throw error;
+    }
+  });
+
+  onMessage('TRANSLATE_TEXT', async (message) => {
+    try {
+      return { text: await translateTextViaPipeline(message.data) };
+    } catch (error) {
+      if ((error as Error).message === 'NEEDS_UNLOCK') {
+        pendingUnlockTexts.push(message.data);
         await sendMessage('NEEDS_UNLOCK', { reason: 'missing_master_key' });
       }
       throw error;

@@ -3,6 +3,7 @@ import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { PopupSwitch } from '@/components/ui/popup-switch';
 import { SearchableSelect, type SelectOption } from '@/components/ui/searchable-select';
 import { masterPasswordManager } from '@/core/keystore/master-password';
+import { openExtensionSidePanel } from '@/entrypoints/sidepanel/actions';
 import { usePopupStore } from '@/stores/popup';
 import { onMessage, sendMessage } from '@/utils/messaging';
 import './App.css';
@@ -112,7 +113,15 @@ function App() {
           <button className="upgrade-chip" type="button">
             Upgrade
           </button>
-          <div className="app-chip">App</div>
+          <button
+            className="app-chip cursor-pointer"
+            type="button"
+            onClick={() => {
+              void openExtensionSidePanel();
+            }}
+          >
+            App
+          </button>
         </div>
       </section>
 

@@ -125,7 +125,7 @@
 
 .popup-select {
   width: 100%;
-  border: 1px solid #2e3543;
+  /* border: 1px solid #2e3543; */
   border-radius: 14px;
   background: #262c35;
   color: var(--popup-text);

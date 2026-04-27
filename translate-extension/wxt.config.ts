@@ -6,7 +6,10 @@ export default defineConfig({
   manifestVersion: 3,
   modules: ['@wxt-dev/module-react'],
   manifest: {
-    permissions: ['storage', 'tabs', 'activeTab'],
+    permissions: ['storage', 'tabs', 'activeTab', 'sidePanel'],
+    side_panel: {
+      default_path: 'sidepanel.html',
+    },
     host_permissions: [
       'https://translate.googleapis.com/*',
       'https://api-free.deepl.com/*',

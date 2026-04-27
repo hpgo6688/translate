@@ -8,6 +8,13 @@ export interface TranslateBatchMessage {
   segments: Array<{ id: string; text: string }>;
 }
 
+export interface TranslateTextMessage {
+  sourceLang: string;
+  targetLang: string;
+  providerId: string;
+  text: string;
+}
+
 export interface SettingsChangedMessage {
   keys: string[];
 }
@@ -24,6 +31,7 @@ export interface UnlockResultMessage {
 
 export interface ExtensionProtocolMap {
   TRANSLATE_BATCH(data: TranslateBatchMessage): { accepted: boolean };
+  TRANSLATE_TEXT(data: TranslateTextMessage): { text: string };
   SETTINGS_CHANGED(data: SettingsChangedMessage): void;
   NEEDS_UNLOCK(data: NeedsUnlockMessage): void;
   UNLOCK_RESULT(data: UnlockResultMessage): void;

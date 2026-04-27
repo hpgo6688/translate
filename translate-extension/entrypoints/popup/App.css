@@ -246,7 +246,7 @@
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-top: 1px solid #2f3542;
   min-width: 0;
 }
@@ -277,7 +277,7 @@
 .cta-row {
   display: grid;
   grid-template-columns: 48px 1fr;
-  gap: 10px;
+  gap: 4px;
 }
 
 .icon-cta {
@@ -309,7 +309,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 9px 2px;
+  padding:4px 2px;
   flex-wrap: nowrap;
 }
 

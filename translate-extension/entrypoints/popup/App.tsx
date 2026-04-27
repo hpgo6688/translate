@@ -14,6 +14,21 @@ type PreferenceRowProps = {
   badge?: string;
 };
 
+function openGeneralOptionsPage(): void {
+  const extensionChrome = (globalThis as {
+    chrome?: {
+      runtime?: { getURL?: (path: string) => string };
+      tabs?: { create?: (options: { url: string }) => void };
+    };
+  }).chrome;
+  const optionsUrl = extensionChrome?.runtime?.getURL?.('options.html#general') ?? '/options.html#general';
+  if (extensionChrome?.tabs?.create) {
+    extensionChrome.tabs.create({ url: optionsUrl });
+    return;
+  }
+  window.open(optionsUrl, '_blank');
+}
+
 function PreferenceRow({ label, trailing, disabled = false, badge }: PreferenceRowProps) {
   return (
     <div className={`preference-row${disabled ? ' is-disabled' : ''}`}>
@@ -86,7 +101,7 @@ function App() {
 
   return (
     <main className="popup-shell">
-      <section className="popup-card popup-header">
+      <section className="p-[10px] popup-header">
         <div className="user-row">
           <div className="user-chip">
             <span className="avatar-dot" />
@@ -99,7 +114,7 @@ function App() {
         </div>
       </section>
 
-      <section className="popup-card popup-primary-flow">
+      <section className="p-[10px] popup-primary-flow">
         <div className="language-pair">
           <label className="field-block pair-item">
             <SearchableSelect
@@ -123,7 +138,7 @@ function App() {
           </label>
         </div>
 
-        <div className="service-card">
+        <div className="px-[10px] service-card py-[14px]">
           <label className="service-row">
             <span className="service-label">Service:</span>
             <select
@@ -170,7 +185,8 @@ function App() {
         </div>
       </section>
 
-      <section className="popup-card popup-preferences">
+      <section className="px-[10px] popup-preferences -mt-[12px]">
+ 
         <PreferenceRow
           label="Always translate this site"
           trailing={
@@ -247,11 +263,17 @@ function App() {
       </section>
 
       <footer className="popup-footer">
-        <a className="options-link" href="/options.html">
+        <button
+          className="options-link cursor-pointer"
+          type="button"
+          onClick={() => {
+            openGeneralOptionsPage();
+          }}
+        >
           Settings
-        </a>
+        </button>
         <span className="footer-version">1.28.5</span>
-        <button className="more-btn" type="button">
+        <button className="more-btn cursor-pointer" type="button">
           More
         </button>
       </footer>

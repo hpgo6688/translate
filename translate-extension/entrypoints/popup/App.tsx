@@ -49,19 +49,21 @@ function App() {
   const [unlockError, setUnlockError] = useState<string | null>(null);
   const [sourceLang, setSourceLang] = useState('auto');
   const [hoverMode, setHoverMode] = useState('option');
-  const [selectionMode, setSelectionMode] = useState('mini-icon');
   const [siteMode, setSiteMode] = useState('always');
   const [hoverEnabled, setHoverEnabled] = useState(true);
-  const [selectionEnabled, setSelectionEnabled] = useState(false);
   const [translateEnglishPages, setTranslateEnglishPages] = useState(false);
 
   const {
     enabled,
     targetLang,
     providerId,
+    selectionEnabled,
+    selectionMode,
     setEnabled,
     setTargetLang,
     setProviderId,
+    setSelectionEnabled,
+    setSelectionMode,
   } = usePopupStore();
 
   const proProviderLocked = providerId !== 'deepl';
@@ -230,7 +232,9 @@ function App() {
               <select
                 className="mini-select"
                 value={selectionMode}
-                onChange={(event) => setSelectionMode(event.target.value)}
+                onChange={(event) => {
+                  void setSelectionMode(event.target.value);
+                }}
               >
                 <option value="direct">Direct trigger</option>
                 <option value="icon">Show icon</option>
@@ -242,7 +246,7 @@ function App() {
               <PopupSwitch
                 checked={selectionEnabled}
                 onChange={(next) => {
-                  setSelectionEnabled(next);
+                  void setSelectionEnabled(next);
                 }}
               />
             </div>

@@ -33,9 +33,12 @@ const hoverIdByElement = new WeakMap<HTMLElement, string>();
 const hoverLoadingById = new Map<string, HTMLSpanElement>();
 const hoverLoadingTimeoutById = new Map<string, number>();
 const hoverLoadingPositionRestore = new WeakMap<HTMLElement, string>();
+const selectionRequestById = new Map<string, { x: number; y: number }>();
+let selectionActionButton: HTMLButtonElement | null = null;
 const translatedParagraphIds = new Set<string>();
 let currentMode: DisplayMode = 'below';
 let hoverRequestSeq = 0;
+let selectionRequestSeq = 0;
 let hoverLoadingStyleReady = false;
 
 type RuntimeMessage = {
@@ -161,6 +164,91 @@ function normalizeHotkey(input: string): string {
   return value;
 }
 
+function isSelectionMode(value: unknown): value is 'direct' | 'icon' | 'mini-icon' | 'ctrl' | 'option' | 'shift' {
+  return (
+    value === 'direct' ||
+    value === 'icon' ||
+    value === 'mini-icon' ||
+    value === 'ctrl' ||
+    value === 'option' ||
+    value === 'shift'
+  );
+}
+
+function showSelectionTranslation(text: string, x: number, y: number): void {
+  const existing = document.querySelector('[data-translate-selection-result]');
+  if (existing) {
+    existing.remove();
+  }
+  const panel = document.createElement('div');
+  panel.setAttribute('data-translate-selection-result', 'true');
+  panel.style.position = 'fixed';
+  panel.style.left = `${Math.max(8, Math.min(window.innerWidth - 320, x))}px`;
+  panel.style.top = `${Math.max(8, Math.min(window.innerHeight - 120, y + 8))}px`;
+  panel.style.maxWidth = '320px';
+  panel.style.padding = '8px 10px';
+  panel.style.borderRadius = '8px';
+  panel.style.background = '#0f172a';
+  panel.style.color = '#f8fafc';
+  panel.style.fontSize = '12px';
+  panel.style.lineHeight = '1.45';
+  panel.style.boxShadow = '0 8px 24px rgba(15, 23, 42, 0.24)';
+  panel.style.zIndex = '2147483647';
+  panel.style.whiteSpace = 'pre-wrap';
+  panel.textContent = text;
+  document.body.append(panel);
+  window.setTimeout(() => {
+    if (panel.isConnected) {
+      panel.remove();
+    }
+  }, 10000);
+}
+
+function removeSelectionActionButton(): void {
+  if (!selectionActionButton) {
+    return;
+  }
+  selectionActionButton.remove();
+  selectionActionButton = null;
+}
+
+function showSelectionActionButton(options: {
+  x: number;
+  y: number;
+  mode: 'icon' | 'mini-icon';
+  onTrigger: () => void;
+}): void {
+  removeSelectionActionButton();
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.setAttribute('aria-label', 'Translate selected text');
+  button.style.position = 'fixed';
+  button.style.left = `${Math.max(8, Math.min(window.innerWidth - 48, options.x))}px`;
+  button.style.top = `${Math.max(8, Math.min(window.innerHeight - 40, options.y + 8))}px`;
+  button.style.zIndex = '2147483647';
+  button.style.border = 'none';
+  button.style.borderRadius = '9999px';
+  button.style.cursor = 'pointer';
+  button.style.display = 'inline-flex';
+  button.style.alignItems = 'center';
+  button.style.justifyContent = 'center';
+  button.style.background = '#2563eb';
+  button.style.color = '#ffffff';
+  button.style.boxShadow = '0 6px 16px rgba(37, 99, 235, 0.35)';
+  button.style.padding = options.mode === 'mini-icon' ? '0 8px' : '0 12px';
+  button.style.height = options.mode === 'mini-icon' ? '24px' : '30px';
+  button.style.fontSize = options.mode === 'mini-icon' ? '11px' : '12px';
+  button.textContent = options.mode === 'mini-icon' ? 'T' : 'Translate';
+  button.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    options.onTrigger();
+    removeSelectionActionButton();
+  });
+  document.body.append(button);
+  selectionActionButton = button;
+}
+
 function resolveHoverTarget(target: EventTarget | null): HTMLElement | null {
   if (!(target instanceof HTMLElement)) {
     return null;
@@ -256,6 +344,8 @@ export default defineContentScript({
       'popupEnabled',
       'popupTargetLang',
       'popupProviderId',
+      'popupSelectionEnabled',
+      'popupSelectionMode',
       'settings',
     ]);
     const initialStyle = initial.translationStyle as
@@ -273,6 +363,12 @@ export default defineContentScript({
     let targetLang = 'zh-CN';
     let providerId = 'google';
     let masterEnabled = true;
+    let popupSelectionEnabled = isBoolean(initial.popupSelectionEnabled) ? initial.popupSelectionEnabled : false;
+    let popupSelectionMode: 'direct' | 'icon' | 'mini-icon' | 'ctrl' | 'option' | 'shift' = isSelectionMode(
+      initial.popupSelectionMode,
+    )
+      ? initial.popupSelectionMode
+      : 'mini-icon';
     let hoverTranslateHotkey = 'Option';
     let currentHoverTarget: HTMLElement | null = null;
     let activeHoverTarget: HTMLElement | null = null;
@@ -366,6 +462,12 @@ export default defineContentScript({
         providerId = changes.popupProviderId.newValue;
         shouldRescan = shouldRescan || hasPopupProviderChanged;
       }
+      if (isBoolean(changes.popupSelectionEnabled?.newValue)) {
+        popupSelectionEnabled = changes.popupSelectionEnabled.newValue;
+      }
+      if (isSelectionMode(changes.popupSelectionMode?.newValue)) {
+        popupSelectionMode = changes.popupSelectionMode.newValue;
+      }
       if (shouldRescan && popupEnabled && masterEnabled) {
         void scanAndQueue({ sourceLang, targetLang, providerId });
       }
@@ -423,8 +525,87 @@ export default defineContentScript({
         segments: [{ id: requestId, text: hoverText }],
       });
     };
+    const triggerSelectionTranslate = () => {
+      if (!masterEnabled || !popupSelectionEnabled) {
+        return;
+      }
+      const selection = window.getSelection();
+      const text = selection?.toString().trim() ?? '';
+      if (!selection || selection.rangeCount === 0 || !text) {
+        return;
+      }
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      selectionRequestSeq += 1;
+      const requestId = `selection-${selectionRequestSeq}`;
+      selectionRequestById.set(requestId, { x: rect.left, y: rect.bottom });
+      void sendMessage('TRANSLATE_BATCH', {
+        sourceLang,
+        targetLang,
+        providerId,
+        segments: [{ id: requestId, text }],
+      });
+    };
+    const mouseupListener = () => {
+      if (!popupSelectionEnabled) {
+        removeSelectionActionButton();
+        return;
+      }
+      if (popupSelectionMode === 'direct') {
+        triggerSelectionTranslate();
+        return;
+      }
+      if (popupSelectionMode === 'icon' || popupSelectionMode === 'mini-icon') {
+        const selection = window.getSelection();
+        const text = selection?.toString().trim() ?? '';
+        if (!selection || selection.rangeCount === 0 || !text) {
+          removeSelectionActionButton();
+          return;
+        }
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        showSelectionActionButton({
+          x: rect.right,
+          y: rect.bottom,
+          mode: popupSelectionMode,
+          onTrigger: triggerSelectionTranslate,
+        });
+      }
+    };
+    const selectionHotkeyListener = (event: KeyboardEvent) => {
+      if (!popupSelectionEnabled) {
+        return;
+      }
+      if (!isSelectionMode(popupSelectionMode)) {
+        return;
+      }
+      if (popupSelectionMode === 'ctrl' && normalizeHotkey(event.key) === 'control') {
+        event.preventDefault();
+        triggerSelectionTranslate();
+        removeSelectionActionButton();
+      }
+      if (popupSelectionMode === 'option' && normalizeHotkey(event.key) === 'alt') {
+        event.preventDefault();
+        triggerSelectionTranslate();
+        removeSelectionActionButton();
+      }
+      if (popupSelectionMode === 'shift' && normalizeHotkey(event.key) === 'shift') {
+        event.preventDefault();
+        triggerSelectionTranslate();
+        removeSelectionActionButton();
+      }
+    };
+    const selectionChangeListener = () => {
+      const text = window.getSelection()?.toString().trim() ?? '';
+      if (!text) {
+        removeSelectionActionButton();
+      }
+    };
     document.addEventListener('mousemove', pointerListener, { passive: true });
     document.addEventListener('keydown', keydownListener);
+    document.addEventListener('mouseup', mouseupListener);
+    document.addEventListener('keydown', selectionHotkeyListener);
+    document.addEventListener('selectionchange', selectionChangeListener);
 
     await mountFloatingButton(ctx, {
       onTranslate: () => {
@@ -468,6 +649,12 @@ export default defineContentScript({
         });
         return;
       }
+      const selectionAnchor = selectionRequestById.get(message.payload.id);
+      if (selectionAnchor) {
+        selectionRequestById.delete(message.payload.id);
+        showSelectionTranslation(message.payload.text, selectionAnchor.x, selectionAnchor.y);
+        return;
+      }
       if (popupEnabled) {
         const target = paragraphById.get(message.payload.id);
         if (!target) {
@@ -495,6 +682,10 @@ export default defineContentScript({
       }
       document.removeEventListener('mousemove', pointerListener);
       document.removeEventListener('keydown', keydownListener);
+      document.removeEventListener('mouseup', mouseupListener);
+      document.removeEventListener('keydown', selectionHotkeyListener);
+      document.removeEventListener('selectionchange', selectionChangeListener);
+      removeSelectionActionButton();
       getChrome().storage.onChanged.removeListener(storageListener);
     };
   },

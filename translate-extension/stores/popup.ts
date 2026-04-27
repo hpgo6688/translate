@@ -5,11 +5,15 @@ type PopupState = {
   enabled: boolean;
   targetLang: string;
   providerId: string;
+  selectionEnabled: boolean;
+  selectionMode: string;
   sessionChars: number;
   cacheHitRate: number;
   setEnabled: (enabled: boolean) => Promise<void>;
   setTargetLang: (targetLang: string) => Promise<void>;
   setProviderId: (providerId: string) => Promise<void>;
+  setSelectionEnabled: (selectionEnabled: boolean) => Promise<void>;
+  setSelectionMode: (selectionMode: string) => Promise<void>;
 };
 
 type ExtensionChrome = {
@@ -52,6 +56,8 @@ export const usePopupStore = create<PopupState>()(
       enabled: false,
       targetLang: 'zh-CN',
       providerId: 'google',
+      selectionEnabled: false,
+      selectionMode: 'mini-icon',
       sessionChars: 0,
       cacheHitRate: 0,
       async setEnabled(enabled) {
@@ -70,6 +76,14 @@ export const usePopupStore = create<PopupState>()(
       async setProviderId(providerId) {
         set({ providerId });
         await getChrome().storage.sync.set({ popupProviderId: providerId });
+      },
+      async setSelectionEnabled(selectionEnabled) {
+        set({ selectionEnabled });
+        await getChrome().storage.sync.set({ popupSelectionEnabled: selectionEnabled });
+      },
+      async setSelectionMode(selectionMode) {
+        set({ selectionMode });
+        await getChrome().storage.sync.set({ popupSelectionMode: selectionMode });
       },
     }),
     {
@@ -96,6 +110,12 @@ export function startPopupStorageSync(): () => void {
     }
     if (typeof changes.popupProviderId?.newValue === 'string') {
       usePopupStore.setState({ providerId: changes.popupProviderId.newValue });
+    }
+    if (typeof changes.popupSelectionEnabled?.newValue === 'boolean') {
+      usePopupStore.setState({ selectionEnabled: changes.popupSelectionEnabled.newValue });
+    }
+    if (typeof changes.popupSelectionMode?.newValue === 'string') {
+      usePopupStore.setState({ selectionMode: changes.popupSelectionMode.newValue });
     }
   };
   getChrome().storage.onChanged.addListener(listener);

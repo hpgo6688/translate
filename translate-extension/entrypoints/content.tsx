@@ -27,11 +27,13 @@ type ShortcutSettings = {
 };
 
 const paragraphById = new Map<string, ParagraphState>();
+const paragraphIdByElement = new WeakMap<HTMLElement, string>();
 const hoverRequestById = new Map<string, HTMLElement>();
 const hoverIdByElement = new WeakMap<HTMLElement, string>();
 const hoverLoadingById = new Map<string, HTMLSpanElement>();
 const hoverLoadingTimeoutById = new Map<string, number>();
 const hoverLoadingPositionRestore = new WeakMap<HTMLElement, string>();
+const translatedParagraphIds = new Set<string>();
 let currentMode: DisplayMode = 'below';
 let hoverRequestSeq = 0;
 let hoverLoadingStyleReady = false;
@@ -82,6 +84,7 @@ async function scanAndQueue(config: {
   const paragraphs = await assignParagraphIds(candidates);
   for (const paragraph of paragraphs) {
     paragraphById.set(paragraph.id, paragraph);
+    paragraphIdByElement.set(paragraph.element, paragraph.id);
   }
 
   const unobserve = observeInViewport(
@@ -379,6 +382,11 @@ export default defineContentScript({
       if (normalizeHotkey(event.key) !== normalizeHotkey(hoverTranslateHotkey)) {
         return;
       }
+      const paragraphId = paragraphIdByElement.get(currentHoverTarget);
+      if (paragraphId && translatedParagraphIds.has(paragraphId)) {
+        // Auto translation already rendered this paragraph, avoid duplicate hover blocks.
+        return;
+      }
       event.preventDefault();
       if (activeHoverTarget === currentHoverTarget && activeHoverRequestId) {
         detachHoverLoading(activeHoverRequestId);
@@ -471,6 +479,7 @@ export default defineContentScript({
           translation: message.payload.text,
           mode: currentMode,
         });
+        translatedParagraphIds.add(target.id);
       }
     });
 

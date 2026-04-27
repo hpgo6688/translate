@@ -38,7 +38,12 @@ let selectionActionButton: HTMLButtonElement | null = null;
 let selectionCardElement: HTMLDivElement | null = null;
 let selectionCardBodyElement: HTMLDivElement | null = null;
 let selectionCardPinButton: HTMLButtonElement | null = null;
+let selectionCardServiceLabelElement: HTMLSpanElement | null = null;
+let selectionCardServiceMenuElement: HTMLDivElement | null = null;
+let selectionCardServiceButtonElement: HTMLButtonElement | null = null;
 let selectionCardPinned = false;
+let selectionCardProviderId = 'google';
+let selectionCardProviderChangeHandler: ((providerId: string) => void) | null = null;
 const translatedParagraphIds = new Set<string>();
 let currentMode: DisplayMode = 'below';
 let hoverRequestSeq = 0;
@@ -62,6 +67,7 @@ type ExtensionChrome = {
   storage: {
     sync: {
       get: (keys: string | string[]) => Promise<Record<string, unknown>>;
+      set: (items: Record<string, unknown>) => Promise<void>;
     };
     onChanged: {
       addListener: (listener: (changes: Record<string, { newValue?: unknown }>, areaName: string) => void) => void;
@@ -179,12 +185,54 @@ function isSelectionMode(value: unknown): value is 'direct' | 'icon' | 'mini-ico
   );
 }
 
+const SELECTION_CARD_PROVIDER_OPTIONS: Array<{ id: string; label: string; tier: 'free' | 'pro' }> = [
+  { id: 'google', label: 'Free Translation Service', tier: 'free' },
+  { id: 'deepl', label: 'DeepL Pro', tier: 'pro' },
+];
+
+function getSelectionProviderLabel(providerId: string): string {
+  return SELECTION_CARD_PROVIDER_OPTIONS.find((item) => item.id === providerId)?.label ?? 'Free Translation Service';
+}
+
+function resolveSelectionCardFontSize(text: string): number {
+  const length = text.trim().length;
+  if (length <= 24) {
+    return 28;
+  }
+  if (length <= 48) {
+    return 24;
+  }
+  if (length <= 96) {
+    return 20;
+  }
+  if (length <= 180) {
+    return 18;
+  }
+  return 16;
+}
+
+function applySelectionCardBodyTypography(text: string): void {
+  if (!selectionCardBodyElement) {
+    return;
+  }
+  const fontSize = resolveSelectionCardFontSize(text);
+  selectionCardBodyElement.style.fontSize = `${fontSize}px`;
+  selectionCardBodyElement.style.lineHeight = fontSize <= 18 ? '1.5' : '1.35';
+}
+
+function updateSelectionCardProviderUI(): void {
+  if (selectionCardServiceLabelElement) {
+    selectionCardServiceLabelElement.textContent = getSelectionProviderLabel(selectionCardProviderId);
+  }
+}
+
 function showSelectionTranslation(text: string, x: number, y: number): void {
   const card = ensureSelectionCard();
   if (!card || !selectionCardBodyElement) {
     return;
   }
   selectionCardBodyElement.textContent = text;
+  applySelectionCardBodyTypography(text);
   card.style.display = 'block';
   if (selectionCardPinned) {
     card.style.opacity = '1';
@@ -246,13 +294,13 @@ function ensureSelectionCard(): HTMLDivElement | null {
   card.style.position = 'fixed';
   card.style.left = '12px';
   card.style.top = '12px';
-  card.style.width = '360px';
+  card.style.width = '420px';
   card.style.maxWidth = 'calc(100vw - 16px)';
-  card.style.minHeight = '120px';
+  card.style.minHeight = '180px';
   card.style.background = '#ffffff';
-  card.style.border = '1px solid rgba(148, 163, 184, 0.28)';
-  card.style.borderRadius = '14px';
-  card.style.boxShadow = '0 20px 40px rgba(15, 23, 42, 0.16)';
+  card.style.border = '1px solid rgba(148, 163, 184, 0.22)';
+  card.style.borderRadius = '18px';
+  card.style.boxShadow = '0 20px 36px rgba(15, 23, 42, 0.14)';
   card.style.zIndex = '2147483647';
   card.style.overflow = 'hidden';
   card.style.display = 'none';
@@ -261,18 +309,132 @@ function ensureSelectionCard(): HTMLDivElement | null {
   const header = document.createElement('div');
   header.style.display = 'flex';
   header.style.alignItems = 'center';
-  header.style.justifyContent = 'space-between';
+  header.style.justifyContent = 'flex-start';
   header.style.gap = '8px';
-  header.style.padding = '10px 12px';
-  header.style.background = '#f8fafc';
+  header.style.padding = '14px 16px 8px';
+  header.style.background = '#ffffff';
   header.style.borderBottom = '1px solid rgba(148, 163, 184, 0.18)';
   header.style.cursor = 'move';
 
-  const title = document.createElement('div');
-  title.textContent = 'Translation';
-  title.style.fontSize = '13px';
-  title.style.fontWeight = '600';
-  title.style.color = '#0f172a';
+  const brand = document.createElement('div');
+  brand.textContent = '⇄';
+  brand.style.width = '28px';
+  brand.style.height = '28px';
+  brand.style.borderRadius = '8px';
+  brand.style.display = 'inline-flex';
+  brand.style.alignItems = 'center';
+  brand.style.justifyContent = 'center';
+  brand.style.fontSize = '14px';
+  brand.style.fontWeight = '700';
+  brand.style.color = '#ffffff';
+  brand.style.background = 'linear-gradient(135deg, #ec4899, #8b5cf6)';
+
+  const servicePickerWrap = document.createElement('div');
+  servicePickerWrap.style.position = 'relative';
+  servicePickerWrap.style.flex = '1';
+
+  const servicePickerButton = document.createElement('button');
+  selectionCardServiceButtonElement = servicePickerButton;
+  servicePickerButton.type = 'button';
+  servicePickerButton.style.height = '36px';
+  servicePickerButton.style.width = '100%';
+  servicePickerButton.style.maxWidth = '220px';
+  servicePickerButton.style.border = 'none';
+  servicePickerButton.style.borderRadius = '10px';
+  servicePickerButton.style.background = '#f4f5f7';
+  servicePickerButton.style.display = 'inline-flex';
+  servicePickerButton.style.alignItems = 'center';
+  servicePickerButton.style.justifyContent = 'space-between';
+  servicePickerButton.style.padding = '0 12px';
+  servicePickerButton.style.cursor = 'pointer';
+
+  const serviceLabel = document.createElement('span');
+  serviceLabel.style.fontSize = '13px';
+  serviceLabel.style.color = '#111827';
+  serviceLabel.style.whiteSpace = 'nowrap';
+  serviceLabel.style.overflow = 'hidden';
+  serviceLabel.style.textOverflow = 'ellipsis';
+  selectionCardServiceLabelElement = serviceLabel;
+  updateSelectionCardProviderUI();
+
+  const serviceArrow = document.createElement('span');
+  serviceArrow.textContent = '▾';
+  serviceArrow.style.fontSize = '12px';
+  serviceArrow.style.color = '#6b7280';
+  servicePickerButton.append(serviceLabel, serviceArrow);
+
+  const serviceMenu = document.createElement('div');
+  serviceMenu.style.position = 'absolute';
+  serviceMenu.style.left = '0';
+  serviceMenu.style.top = '42px';
+  serviceMenu.style.width = '270px';
+  serviceMenu.style.background = '#ffffff';
+  serviceMenu.style.border = '1px solid rgba(148, 163, 184, 0.2)';
+  serviceMenu.style.borderRadius = '12px';
+  serviceMenu.style.boxShadow = '0 12px 30px rgba(15, 23, 42, 0.15)';
+  serviceMenu.style.padding = '6px';
+  serviceMenu.style.display = 'none';
+  serviceMenu.style.zIndex = '2147483647';
+  selectionCardServiceMenuElement = serviceMenu;
+
+  for (const option of SELECTION_CARD_PROVIDER_OPTIONS) {
+    const optionButton = document.createElement('button');
+    optionButton.type = 'button';
+    optionButton.style.width = '100%';
+    optionButton.style.border = 'none';
+    optionButton.style.borderRadius = '8px';
+    optionButton.style.padding = '8px 10px';
+    optionButton.style.background = 'transparent';
+    optionButton.style.display = 'flex';
+    optionButton.style.alignItems = 'center';
+    optionButton.style.justifyContent = 'space-between';
+    optionButton.style.cursor = 'pointer';
+
+    const label = document.createElement('span');
+    label.textContent = option.label;
+    label.style.fontSize = '14px';
+    label.style.color = '#111827';
+
+    const tier = document.createElement('span');
+    tier.textContent = option.tier === 'pro' ? 'Pro' : 'Free';
+    tier.style.fontSize = '11px';
+    tier.style.padding = '1px 6px';
+    tier.style.borderRadius = '9999px';
+    tier.style.background = option.tier === 'pro' ? '#e0e7ff' : '#e5e7eb';
+    tier.style.color = option.tier === 'pro' ? '#3730a3' : '#374151';
+    optionButton.append(label, tier);
+
+    optionButton.addEventListener('mouseenter', () => {
+      optionButton.style.background = '#f3f4f6';
+    });
+    optionButton.addEventListener('mouseleave', () => {
+      optionButton.style.background = 'transparent';
+    });
+    optionButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      selectionCardProviderId = option.id;
+      updateSelectionCardProviderUI();
+      if (selectionCardServiceMenuElement) {
+        selectionCardServiceMenuElement.style.display = 'none';
+      }
+      selectionCardProviderChangeHandler?.(option.id);
+      void getChrome().storage.sync.set({ popupProviderId: option.id });
+    });
+    serviceMenu.append(optionButton);
+  }
+
+  servicePickerButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!selectionCardServiceMenuElement) {
+      return;
+    }
+    selectionCardServiceMenuElement.style.display =
+      selectionCardServiceMenuElement.style.display === 'none' ? 'block' : 'none';
+  });
+
+  servicePickerWrap.append(servicePickerButton, serviceMenu);
 
   const actions = document.createElement('div');
   actions.style.display = 'inline-flex';
@@ -281,8 +443,8 @@ function ensureSelectionCard(): HTMLDivElement | null {
 
   const pinButton = document.createElement('button');
   pinButton.type = 'button';
-  pinButton.style.height = '24px';
-  pinButton.style.padding = '0 8px';
+  pinButton.style.height = '26px';
+  pinButton.style.padding = '0 10px';
   pinButton.style.border = 'none';
   pinButton.style.borderRadius = '9999px';
   pinButton.style.fontSize = '11px';
@@ -298,13 +460,13 @@ function ensureSelectionCard(): HTMLDivElement | null {
 
   const closeButton = document.createElement('button');
   closeButton.type = 'button';
-  closeButton.textContent = 'x';
-  closeButton.style.width = '24px';
-  closeButton.style.height = '24px';
+  closeButton.textContent = '✕';
+  closeButton.style.width = '26px';
+  closeButton.style.height = '26px';
   closeButton.style.border = 'none';
   closeButton.style.borderRadius = '9999px';
-  closeButton.style.background = '#e2e8f0';
-  closeButton.style.color = '#334155';
+  closeButton.style.background = '#f1f5f9';
+  closeButton.style.color = '#64748b';
   closeButton.style.fontSize = '12px';
   closeButton.style.cursor = 'pointer';
   closeButton.addEventListener('click', (event) => {
@@ -313,18 +475,63 @@ function ensureSelectionCard(): HTMLDivElement | null {
     closeSelectionCard();
   });
 
-  actions.append(pinButton, closeButton);
-  header.append(title, actions);
+  const moreButton = document.createElement('button');
+  moreButton.type = 'button';
+  moreButton.textContent = '⋯';
+  moreButton.style.width = '26px';
+  moreButton.style.height = '26px';
+  moreButton.style.border = 'none';
+  moreButton.style.borderRadius = '9999px';
+  moreButton.style.background = '#f1f5f9';
+  moreButton.style.color = '#64748b';
+  moreButton.style.fontSize = '14px';
+  moreButton.style.cursor = 'pointer';
+
+  actions.append(pinButton, moreButton, closeButton);
+  header.append(brand, servicePickerWrap, actions);
 
   const body = document.createElement('div');
-  body.style.padding = '12px';
+  body.style.padding = '18px 18px 12px';
   body.style.color = '#111827';
-  body.style.fontSize = '14px';
-  body.style.lineHeight = '1.6';
+  body.style.fontSize = '28px';
+  body.style.fontWeight = '500';
+  body.style.lineHeight = '1.35';
   body.style.whiteSpace = 'pre-wrap';
   body.style.wordBreak = 'break-word';
 
-  card.append(header, body);
+  const footer = document.createElement('div');
+  footer.style.display = 'flex';
+  footer.style.alignItems = 'center';
+  footer.style.justifyContent = 'space-between';
+  footer.style.padding = '8px 14px 12px';
+
+  const leftActions = document.createElement('div');
+  leftActions.style.display = 'inline-flex';
+  leftActions.style.gap = '8px';
+
+  const rightActions = document.createElement('div');
+  rightActions.style.display = 'inline-flex';
+  rightActions.style.gap = '8px';
+
+  const makeFooterIcon = (text: string) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = text;
+    button.style.width = '26px';
+    button.style.height = '26px';
+    button.style.border = 'none';
+    button.style.borderRadius = '8px';
+    button.style.background = '#f8fafc';
+    button.style.color = '#64748b';
+    button.style.fontSize = '14px';
+    button.style.cursor = 'pointer';
+    return button;
+  };
+  leftActions.append(makeFooterIcon('🔊'), makeFooterIcon('⧉'));
+  rightActions.append(makeFooterIcon('👍'), makeFooterIcon('👎'));
+  footer.append(leftActions, rightActions);
+
+  card.append(header, body, footer);
   document.body.append(card);
 
   let dragging = false;
@@ -562,6 +769,11 @@ export default defineContentScript({
     if (isNonEmptyString(initial.popupProviderId)) {
       providerId = initial.popupProviderId;
     }
+    selectionCardProviderId = providerId;
+    selectionCardProviderChangeHandler = (nextProviderId: string) => {
+      providerId = nextProviderId;
+    };
+    updateSelectionCardProviderUI();
     if (isDisplayMode(initialStyle?.displayMode)) {
       currentMode = initialStyle.displayMode;
     }
@@ -631,6 +843,8 @@ export default defineContentScript({
       if (isNonEmptyString(changes.popupProviderId?.newValue)) {
         const hasPopupProviderChanged = providerId !== changes.popupProviderId.newValue;
         providerId = changes.popupProviderId.newValue;
+        selectionCardProviderId = providerId;
+        updateSelectionCardProviderUI();
         shouldRescan = shouldRescan || hasPopupProviderChanged;
       }
       if (isBoolean(changes.popupSelectionEnabled?.newValue)) {
@@ -782,10 +996,19 @@ export default defineContentScript({
       }
     };
     const pointerDownOutsideCardListener = (event: PointerEvent) => {
+      const targetNode = event.target as Node | null;
+      if (
+        selectionCardServiceMenuElement &&
+        selectionCardServiceMenuElement.style.display !== 'none' &&
+        targetNode &&
+        !selectionCardServiceMenuElement.contains(targetNode) &&
+        !selectionCardServiceButtonElement?.contains(targetNode)
+      ) {
+        selectionCardServiceMenuElement.style.display = 'none';
+      }
       if (selectionCardPinned || !selectionCardElement || selectionCardElement.style.display === 'none') {
         return;
       }
-      const targetNode = event.target as Node | null;
       if (!targetNode) {
         closeSelectionCard();
         return;
@@ -898,7 +1121,11 @@ export default defineContentScript({
       selectionCardElement = null;
       selectionCardBodyElement = null;
       selectionCardPinButton = null;
+      selectionCardServiceLabelElement = null;
+      selectionCardServiceMenuElement = null;
+      selectionCardServiceButtonElement = null;
       selectionCardPinned = false;
+      selectionCardProviderChangeHandler = null;
       getChrome().storage.onChanged.removeListener(storageListener);
     };
   },

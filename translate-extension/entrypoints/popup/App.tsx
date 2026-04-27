@@ -1,25 +1,55 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 
+import { LanguageSelect } from '@/components/ui/language-select';
+import { PopupSwitch } from '@/components/ui/popup-switch';
 import { masterPasswordManager } from '@/core/keystore/master-password';
 import { usePopupStore } from '@/stores/popup';
 import { onMessage, sendMessage } from '@/utils/messaging';
+import './App.css';
+
+type PreferenceRowProps = {
+  label: string;
+  trailing: ReactNode;
+  disabled?: boolean;
+  badge?: string;
+};
+
+function PreferenceRow({ label, trailing, disabled = false, badge }: PreferenceRowProps) {
+  return (
+    <div className={`preference-row${disabled ? ' is-disabled' : ''}`}>
+      <div className="preference-copy">
+        <div className="preference-label-wrap">
+          <p className="preference-label">{label}</p>
+          {badge ? <span className="preference-badge">{badge}</span> : null}
+        </div>
+      </div>
+      <div className="preference-control">{trailing}</div>
+    </div>
+  );
+}
 
 function App() {
-  const { t } = useTranslation();
   const [showUnlock, setShowUnlock] = useState(false);
   const [unlockPassword, setUnlockPassword] = useState('');
   const [unlockError, setUnlockError] = useState<string | null>(null);
+  const [sourceLang, setSourceLang] = useState('auto');
+  const [hoverMode, setHoverMode] = useState('option');
+  const [selectionMode, setSelectionMode] = useState('mini-icon');
+  const [siteMode, setSiteMode] = useState('always');
+  const [hoverEnabled, setHoverEnabled] = useState(true);
+  const [selectionEnabled, setSelectionEnabled] = useState(false);
+  const [translateEnglishPages, setTranslateEnglishPages] = useState(false);
+
   const {
     enabled,
     targetLang,
     providerId,
-    sessionChars,
-    cacheHitRate,
     setEnabled,
     setTargetLang,
     setProviderId,
   } = usePopupStore();
+
+  const proProviderLocked = providerId !== 'deepl';
 
   const providerOptions = useMemo(
     () => [
@@ -28,7 +58,6 @@ function App() {
     ],
     [],
   );
-
   useEffect(() => {
     const remove = onMessage('NEEDS_UNLOCK', () => {
       setShowUnlock(true);
@@ -37,72 +66,189 @@ function App() {
   }, []);
 
   return (
-    <main className="w-80 p-4 text-slate-900">
-      <h1 className="text-lg font-semibold">{t('popup.title')}</h1>
-      <label className="mt-3 flex items-center justify-between text-sm">
-        <span>{t('popup.enableCurrentTab')}</span>
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(event) => {
-            void setEnabled(event.target.checked);
-          }}
+    <main className="popup-shell">
+      <section className="popup-card popup-header">
+        <div className="user-row">
+          <div className="user-chip">
+            <span className="avatar-dot" />
+            <span>Guest</span>
+          </div>
+          <button className="upgrade-chip" type="button">
+            Upgrade
+          </button>
+          <div className="app-chip">App</div>
+        </div>
+      </section>
+
+      <section className="popup-card popup-primary-flow">
+        <div className="language-pair">
+          <label className="field-block pair-item">
+            <LanguageSelect
+              value={sourceLang}
+              onChange={(next) => {
+                setSourceLang(next);
+              }}
+            />
+          </label>
+          <div className="pair-arrow">→</div>
+          <label className="field-block pair-item">
+            <LanguageSelect
+              mode="target"
+              value={targetLang}
+              dropdownAlign="right"
+              onChange={(next) => {
+                void setTargetLang(next);
+              }}
+            />
+          </label>
+        </div>
+
+        <div className="service-card">
+          <label className="service-row">
+            <span className="service-label">Service:</span>
+            <select
+              className="inline-select"
+              value={providerId}
+              onChange={(event) => {
+                void setProviderId(event.target.value);
+              }}
+            >
+              {providerOptions.map((provider) => (
+                <option key={provider.id} value={provider.id}>
+                  {provider.label === 'Google' ? 'Free Translation Service' : 'DeepL Pro'}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="service-row muted">
+            <span className="service-label">AI Expert:</span>
+            <select className="inline-select" defaultValue="general">
+              <option value="general">General</option>
+            </select>
+          </label>
+          <div className="service-row">
+            <div className="preference-label-wrap">
+              <span className="service-label">AI Context-Aware</span>
+              <span className="preference-badge">Pro</span>
+            </div>
+            <PopupSwitch checked={false} disabled />
+          </div>
+        </div>
+
+        <div className="cta-row">
+          <button className="icon-cta" type="button" aria-label="switch direction">
+            ⇄
+          </button>
+          <button
+            className="translate-cta"
+            onClick={() => {
+              void setEnabled(true);
+            }}
+          >
+            Translate
+          </button>
+        </div>
+      </section>
+
+      <section className="popup-card popup-preferences">
+        <PreferenceRow
+          label="Always translate this site"
+          trailing={
+            <div className="preference-actions">
+              <select className="mini-select" value={siteMode} onChange={(event) => setSiteMode(event.target.value)}>
+                <option value="always">Always translate this site</option>
+                <option value="never">Never translate this site</option>
+              </select>
+              <PopupSwitch
+                checked={enabled}
+                onChange={(next) => {
+                  void setEnabled(next);
+                }}
+              />
+            </div>
+          }
         />
-      </label>
+        <PreferenceRow
+          label="Hover: + ⌥ translate/restore this paragraph"
+          trailing={
+            <div className="preference-actions">
+              <select className="mini-select" value={hoverMode} onChange={(event) => setHoverMode(event.target.value)}>
+                <option value="ctrl">+ Ctrl translate/restore this paragraph</option>
+                <option value="shift">+ Shift translate/restore this paragraph</option>
+                <option value="option">+ ⌥ translate/restore this paragraph</option>
+                <option value="hold">+ Hold left click immediately translate this paragraph</option>
+              </select>
+              <PopupSwitch
+                checked={hoverEnabled}
+                onChange={(next) => {
+                  setHoverEnabled(next);
+                }}
+              />
+            </div>
+          }
+        />
+        <PreferenceRow
+          label="Text selection translation: Show mini icon"
+          trailing={
+            <div className="preference-actions">
+              <select
+                className="mini-select"
+                value={selectionMode}
+                onChange={(event) => setSelectionMode(event.target.value)}
+              >
+                <option value="direct">Direct trigger</option>
+                <option value="icon">Show icon</option>
+                <option value="mini-icon">Show mini icon</option>
+                <option value="ctrl">Press Ctrl to trigger</option>
+                <option value="option">Press ⌥ to trigger</option>
+                <option value="shift">Press Shift to trigger</option>
+              </select>
+              <PopupSwitch
+                checked={selectionEnabled}
+                onChange={(next) => {
+                  setSelectionEnabled(next);
+                }}
+              />
+            </div>
+          }
+        />
+        <PreferenceRow
+          label="Always translate English pages"
+          disabled={proProviderLocked}
+          trailing={
+            <PopupSwitch
+              checked={translateEnglishPages}
+              onChange={(next) => {
+                setTranslateEnglishPages(next);
+              }}
+            />
+          }
+        />
+      </section>
 
-      <label className="mt-3 block text-sm">
-        <span className="mb-1 block">Target Language</span>
-        <select
-          className="w-full rounded border p-1"
-          value={targetLang}
-          onChange={(event) => {
-            void setTargetLang(event.target.value);
-          }}
-        >
-          <option value="zh-CN">Chinese (zh-CN)</option>
-          <option value="en">English (en)</option>
-          <option value="ja">Japanese (ja)</option>
-        </select>
-      </label>
-
-      <label className="mt-3 block text-sm">
-        <span className="mb-1 block">Provider</span>
-        <select
-          className="w-full rounded border p-1"
-          value={providerId}
-          onChange={(event) => {
-            void setProviderId(event.target.value);
-          }}
-        >
-          {providerOptions.map((provider) => (
-            <option key={provider.id} value={provider.id}>
-              {provider.label}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600">
-        Session chars: {sessionChars} | Cache hit rate: {Math.round(cacheHitRate * 100)}%
-      </div>
-
-      <a className="mt-3 inline-block text-xs text-blue-600 underline" href="/options.html">
-        Open Options
-      </a>
+      <footer className="popup-footer">
+        <a className="options-link" href="/options.html">
+          Settings
+        </a>
+        <span className="footer-version">1.28.5</span>
+        <button className="more-btn" type="button">
+          More
+        </button>
+      </footer>
 
       {showUnlock && (
-        <div className="mt-3 rounded border border-amber-300 bg-amber-50 p-2 text-xs">
-          <p className="mb-1 font-medium">Unlock required</p>
+        <div className="unlock-panel">
+          <p className="unlock-title">Unlock required</p>
           <input
             type="password"
-            className="mb-2 w-full rounded border p-1"
+            className="unlock-input"
             value={unlockPassword}
             onChange={(event) => setUnlockPassword(event.target.value)}
             placeholder="Master password"
           />
-          {unlockError ? <p className="mb-1 text-red-600">{unlockError}</p> : null}
+          {unlockError ? <p className="unlock-error">{unlockError}</p> : null}
           <button
-            className="rounded bg-slate-900 px-2 py-1 text-white"
+            className="unlock-btn"
             onClick={() => {
               void (async () => {
                 try {

@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { I18nextProvider } from 'react-i18next';
 import App from './App.tsx';
+import './style.css';
 import '@/assets/tailwind.css';
 import { i18n, setupI18n } from '@/utils/i18n';
 import { startPopupStorageSync } from '@/stores/popup';

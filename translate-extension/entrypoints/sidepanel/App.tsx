@@ -92,12 +92,6 @@ function App() {
   return (
     <main className="sidepanel-shell">
       <section className="panel-body">
-        <header className="panel-topbar">
-          <div className="panel-brand">🔠 Immersive Translate - Translate Web & PDF</div>
-          <div className="panel-top-actions">
-            <button type="button">✕</button>
-          </div>
-        </header>
         <div className="panel-content">
           <div className="workspace">
           <header className="sidepanel-header">

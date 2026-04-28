@@ -23,4 +23,11 @@ describe('sidepanel service options', () => {
       changed: true,
     });
   });
+
+  it('keeps llm option enabled for all users', () => {
+    const freeOptions = buildServiceOptions(false);
+    const proOptions = buildServiceOptions(true);
+    expect(freeOptions.find((item) => item.id === 'llm')?.disabled).toBeFalsy();
+    expect(proOptions.find((item) => item.id === 'llm')?.disabled).toBeFalsy();
+  });
 });

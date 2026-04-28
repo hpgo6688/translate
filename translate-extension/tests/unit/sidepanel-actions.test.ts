@@ -24,6 +24,7 @@ describe('sidepanel actions', () => {
       targetLang: 'zh-CN',
       providerId: 'google',
       text: 'hello',
+      liteLlmConfig: undefined,
     });
 
     expect(result).toBe('你好');
@@ -32,6 +33,7 @@ describe('sidepanel actions', () => {
       targetLang: 'zh-CN',
       providerId: 'google',
       text: 'hello',
+      liteLlmConfig: undefined,
     });
   });
 });

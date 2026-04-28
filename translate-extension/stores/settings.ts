@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { z } from 'zod';
+import { liteLlmDefaults } from '@/utils/litellm-config';
 
 export const generalSchema = z.object({
   defaultSourceLang: z.string().min(2),
@@ -36,11 +37,21 @@ export const providerItemSchema = z.object({
   requiresKey: z.boolean(),
 });
 
+export const liteLlmSettingsSchema = z.object({
+  endpoint: z.string().trim(),
+  apiKey: z.string(),
+  model: z.string().trim(),
+  temperature: z.number().min(0).max(1.5),
+  maxTokens: z.number().int().min(32).max(4096),
+  timeoutMs: z.number().int().min(1000).max(60000),
+});
+
 export const settingsSchema = z.object({
   general: generalSchema,
   display: displaySchema,
   shortcuts: shortcutsSchema,
   providers: z.record(z.string(), providerItemSchema),
+  liteLlm: liteLlmSettingsSchema,
   cache: cacheSchema,
   localeOverride: z.string().nullable(),
 });
@@ -93,6 +104,13 @@ const initialSettings: SettingsState = {
   providers: {
     google: { enabled: true, requiresKey: false },
     deepl: { enabled: false, requiresKey: true },
+    llm: { enabled: false, requiresKey: false },
+  },
+  liteLlm: {
+    endpoint: 'https://litellm.example.com',
+    apiKey: '',
+    model: 'gpt-5.4-mini',
+    ...liteLlmDefaults,
   },
   cache: {
     ttlDays: 30,
@@ -112,6 +130,7 @@ export const useSettingsStore = create<SettingsStore>()(
           display: merged.display,
           shortcuts: merged.shortcuts,
           providers: merged.providers,
+          liteLlm: merged.liteLlm,
           cache: merged.cache,
           localeOverride: merged.localeOverride,
         });
@@ -122,6 +141,7 @@ export const useSettingsStore = create<SettingsStore>()(
         await getChrome().storage.sync.set({
           settings: parsed.data,
           providerConfigs: parsed.data.providers,
+          liteLlmConfig: parsed.data.liteLlm,
           translationStyle: parsed.data.display,
         });
         return true;

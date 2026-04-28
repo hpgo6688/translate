@@ -5,9 +5,10 @@ import { splitByCache } from '@/core/orchestrator/cache-filter';
 import { OrchestratorQueue } from '@/core/orchestrator/queue';
 import { withProviderRetry } from '@/core/orchestrator/retry';
 import { streamToTab } from '@/core/orchestrator/streamer';
-import type { TranslationSegment } from '@/core/translators/base';
+import { TranslateProviderError, type TranslationSegment } from '@/core/translators/base';
 import { getProvider } from '@/core/translators';
 import { usageMeter } from '@/core/usage/meter';
+import { normalizeLiteLlmConfig } from '@/utils/litellm-config';
 import { sendMessage, onMessage, type TranslateBatchMessage, type TranslateTextMessage } from '@/utils/messaging';
 
 const queue = new OrchestratorQueue(4, 50, 10);
@@ -15,6 +16,11 @@ const pendingUnlockBatches: Array<{ input: TranslateBatchMessage; tabId: number 
 const pendingUnlockTexts: TranslateTextMessage[] = [];
 
 type ExtensionChrome = {
+  storage: {
+    sync: {
+      get: (keys: string[]) => Promise<Record<string, unknown>>;
+    };
+  };
   tabs: {
     sendMessage: (tabId: number, message: unknown) => Promise<void>;
   };
@@ -26,6 +32,29 @@ function getChrome(): ExtensionChrome {
     throw new Error('Chrome extension API unavailable');
   }
   return extensionChrome;
+}
+
+async function readLiteLlmConfig(): Promise<ReturnType<typeof normalizeLiteLlmConfig>> {
+  const payload = await getChrome().storage.sync.get(['liteLlmConfig']);
+  return normalizeLiteLlmConfig(payload.liteLlmConfig);
+}
+
+function mapTranslationError(error: unknown): Error {
+  if (error instanceof TranslateProviderError) {
+    if (error.code === 'AUTH_FAILED') {
+      return new Error('AUTH_FAILED');
+    }
+    if (error.code === 'PROVIDER_KEY_MISSING') {
+      return new Error('CONFIG_MISSING');
+    }
+    if (error.message.includes('did not include translated text')) {
+      return new Error('INVALID_RESPONSE');
+    }
+  }
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return new Error('TIMEOUT');
+  }
+  return error instanceof Error ? error : new Error('TRANSLATION_FAILED');
 }
 
 async function handleTranslateBatch(
@@ -61,13 +90,25 @@ async function handleTranslateBatch(
       const apiKey = provider.requiresKey
         ? await providerKeyStore.getProviderKey(provider.id)
         : undefined;
+      const liteLlmConfig =
+        provider.id === 'llm'
+          ? (input.liteLlmConfig ?? (await readLiteLlmConfig()))
+          : null;
+      const abortController = new AbortController();
+      if (provider.id === 'llm') {
+        if (!liteLlmConfig) {
+          throw new Error('CONFIG_MISSING');
+        }
+        setTimeout(() => abortController.abort(), liteLlmConfig.timeoutMs);
+      }
       const chunkStream = await withProviderRetry(() =>
         Promise.resolve(
           provider.translate(batch, {
           sourceLang: input.sourceLang,
           targetLang: input.targetLang,
-          signal: new AbortController().signal,
+          signal: abortController.signal,
           apiKey: apiKey ?? undefined,
+          providerConfig: liteLlmConfig ?? undefined,
           }),
         ),
       );
@@ -102,13 +143,25 @@ async function translateTextViaPipeline(input: TranslateTextMessage): Promise<st
   }
 
   const apiKey = provider.requiresKey ? await providerKeyStore.getProviderKey(provider.id) : undefined;
+  const liteLlmConfig =
+    provider.id === 'llm'
+      ? (input.liteLlmConfig ?? (await readLiteLlmConfig()))
+      : null;
+  if (provider.id === 'llm' && !liteLlmConfig) {
+    throw new Error('CONFIG_MISSING');
+  }
+  const abortController = new AbortController();
+  if (provider.id === 'llm' && liteLlmConfig) {
+    setTimeout(() => abortController.abort(), liteLlmConfig.timeoutMs);
+  }
   const stream = await withProviderRetry(() =>
     Promise.resolve(
       provider.translate(segments, {
         sourceLang: input.sourceLang,
         targetLang: input.targetLang,
-        signal: new AbortController().signal,
+        signal: abortController.signal,
         apiKey: apiKey ?? undefined,
+        providerConfig: liteLlmConfig ?? undefined,
       }),
     ),
   );
@@ -170,7 +223,7 @@ export default defineBackground(() => {
         }
         await sendMessage('NEEDS_UNLOCK', { reason: 'missing_master_key' });
       }
-      throw error;
+      throw mapTranslationError(error);
     }
   });
 
@@ -179,10 +232,10 @@ export default defineBackground(() => {
       return { text: await translateTextViaPipeline(message.data) };
     } catch (error) {
       if ((error as Error).message === 'NEEDS_UNLOCK') {
-        pendingUnlockTexts.push(message.data);
         await sendMessage('NEEDS_UNLOCK', { reason: 'missing_master_key' });
+        pendingUnlockTexts.push(message.data);
       }
-      throw error;
+      throw mapTranslationError(error);
     }
   });
 });

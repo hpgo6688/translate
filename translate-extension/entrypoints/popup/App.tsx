@@ -5,6 +5,7 @@ import { SearchableSelect, type SelectOption } from '@/components/ui/searchable-
 import { masterPasswordManager } from '@/core/keystore/master-password';
 import { openExtensionSidePanel } from '@/entrypoints/sidepanel/actions';
 import { usePopupStore } from '@/stores/popup';
+import { liteLlmDefaults, normalizeLiteLlmConfig } from '@/utils/litellm-config';
 import { onMessage, sendMessage } from '@/utils/messaging';
 import './App.css';
 
@@ -53,6 +54,12 @@ function App() {
   const [siteMode, setSiteMode] = useState('always');
   const [hoverEnabled, setHoverEnabled] = useState(true);
   const [translateEnglishPages, setTranslateEnglishPages] = useState(false);
+  const [llmEndpoint, setLlmEndpoint] = useState('');
+  const [llmApiKey, setLlmApiKey] = useState('');
+  const [llmModel, setLlmModel] = useState('');
+  const [llmTemperature, setLlmTemperature] = useState(String(liteLlmDefaults.temperature));
+  const [llmMaxTokens, setLlmMaxTokens] = useState(String(liteLlmDefaults.maxTokens));
+  const [llmTimeoutMs, setLlmTimeoutMs] = useState(String(liteLlmDefaults.timeoutMs));
 
   const {
     enabled,
@@ -73,8 +80,21 @@ function App() {
     () => [
       { id: 'google', label: 'Google' },
       { id: 'deepl', label: 'DeepL' },
+      { id: 'llm', label: 'LiteLLM' },
     ],
     [],
+  );
+  const llmConfig = useMemo(
+    () =>
+      normalizeLiteLlmConfig({
+        endpoint: llmEndpoint.trim(),
+        apiKey: llmApiKey.trim(),
+        model: llmModel.trim(),
+        temperature: Number(llmTemperature),
+        maxTokens: Number(llmMaxTokens),
+        timeoutMs: Number(llmTimeoutMs),
+      }),
+    [llmApiKey, llmEndpoint, llmMaxTokens, llmModel, llmTemperature, llmTimeoutMs],
   );
   const sourceLangOptions = useMemo<SelectOption[]>(
     () => [
@@ -100,6 +120,33 @@ function App() {
       setShowUnlock(true);
     });
     return remove;
+  }, []);
+  useEffect(() => {
+    if (!llmConfig) {
+      return;
+    }
+    const extensionChrome = (globalThis as {
+      chrome?: { storage?: { sync?: { set?: (items: Record<string, unknown>) => Promise<void> } } };
+    }).chrome;
+    void extensionChrome?.storage?.sync?.set?.({ liteLlmConfig: llmConfig });
+  }, [llmConfig]);
+  useEffect(() => {
+    const extensionChrome = (globalThis as {
+      chrome?: { storage?: { sync?: { get?: (keys: string[]) => Promise<Record<string, unknown>> } } };
+    }).chrome;
+    void (async () => {
+      const payload = await extensionChrome?.storage?.sync?.get?.(['liteLlmConfig']);
+      const existing = normalizeLiteLlmConfig(payload?.liteLlmConfig);
+      if (!existing) {
+        return;
+      }
+      setLlmEndpoint(existing.endpoint);
+      setLlmApiKey(existing.apiKey);
+      setLlmModel(existing.model);
+      setLlmTemperature(String(existing.temperature));
+      setLlmMaxTokens(String(existing.maxTokens));
+      setLlmTimeoutMs(String(existing.timeoutMs));
+    })();
   }, []);
 
   return (
@@ -157,15 +204,55 @@ function App() {
               value={providerId}
               onChange={(event) => {
                 void setProviderId(event.target.value);
+                if (event.target.value === 'llm' && llmConfig) {
+                  const extensionChrome = (globalThis as {
+                    chrome?: { storage?: { sync?: { set?: (items: Record<string, unknown>) => Promise<void> } } };
+                  }).chrome;
+                  void extensionChrome?.storage?.sync?.set?.({ liteLlmConfig: llmConfig });
+                }
               }}
             >
               {providerOptions.map((provider) => (
                 <option key={provider.id} value={provider.id}>
-                  {provider.label === 'Google' ? 'Free Translation Service' : 'DeepL Pro'}
+                  {provider.id === 'google'
+                    ? 'Free Translation Service'
+                    : provider.id === 'deepl'
+                      ? 'DeepL Pro'
+                      : 'LiteLLM Custom'}
                 </option>
               ))}
             </select>
           </label>
+          {providerId === 'llm' ? (
+            <>
+              <label className="service-row muted">
+                <span className="service-label">Endpoint:</span>
+                <input className="inline-select" value={llmEndpoint} onChange={(event) => setLlmEndpoint(event.target.value)} />
+              </label>
+              <label className="service-row muted">
+                <span className="service-label">API Key:</span>
+                <input className="inline-select" type="password" value={llmApiKey} onChange={(event) => setLlmApiKey(event.target.value)} />
+              </label>
+              <label className="service-row muted">
+                <span className="service-label">Model:</span>
+                <input className="inline-select" value={llmModel} onChange={(event) => setLlmModel(event.target.value)} />
+              </label>
+              <label className="service-row muted">
+                <span className="service-label">Temp/Tokens/Timeout:</span>
+                <input
+                  className="inline-select"
+                  value={`${llmTemperature}/${llmMaxTokens}/${llmTimeoutMs}`}
+                  onChange={(event) => {
+                    const [temp, max, timeout] = event.target.value.split('/');
+                    setLlmTemperature(temp ?? '');
+                    setLlmMaxTokens(max ?? '');
+                    setLlmTimeoutMs(timeout ?? '');
+                  }}
+                />
+              </label>
+              {!llmConfig ? <p className="text-xs text-red-600">LLM config invalid</p> : null}
+            </>
+          ) : null}
           <label className="service-row muted">
             <span className="service-label">AI Expert:</span>
             <select className="inline-select" defaultValue="general">

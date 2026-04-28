@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { LanguageSelect } from '@/components/ui/language-select';
 import { usePopupStore } from '@/stores/popup';
+import { liteLlmDefaults, normalizeLiteLlmConfig } from '@/utils/litellm-config';
 import { sendMessage } from '@/utils/messaging';
 import { requestSidePanelTranslation } from './actions';
 
@@ -9,6 +10,7 @@ type ExtensionChrome = {
   storage?: {
     sync?: {
       get?: (keys: string[]) => Promise<Record<string, unknown>>;
+      set?: (items: Record<string, unknown>) => Promise<void>;
     };
   };
 };
@@ -43,6 +45,12 @@ function App() {
   const [isProUser, setIsProUser] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [llmEndpoint, setLlmEndpoint] = useState('');
+  const [llmApiKey, setLlmApiKey] = useState('');
+  const [llmModel, setLlmModel] = useState('');
+  const [llmTemperature, setLlmTemperature] = useState(String(liteLlmDefaults.temperature));
+  const [llmMaxTokens, setLlmMaxTokens] = useState(String(liteLlmDefaults.maxTokens));
+  const [llmTimeoutMs, setLlmTimeoutMs] = useState(String(liteLlmDefaults.timeoutMs));
 
   const serviceOptions = useMemo<ServiceMenuItem[]>(
     () => [
@@ -50,7 +58,7 @@ function App() {
       { id: 'google', label: 'Google Translate', group: 'free', icon: '🌐', providerId: 'google' },
       { id: 'microsoft', label: 'Microsoft Translator', group: 'free', icon: '🪟', disabled: true },
       { id: 'deepseek', label: 'DeepSeek-V3.2', group: 'pro', badge: 'Pro', icon: '🌀', disabled: true },
-      { id: 'gpt5', label: 'GPT-5 mini', group: 'pro', badge: 'Pro', icon: '◎', disabled: true },
+      { id: 'llm', label: 'LiteLLM (Custom)', group: 'pro', badge: 'Pro', icon: '◎', providerId: 'llm' },
       { id: 'claude', label: 'Claude Haiku 4.5', group: 'pro', badge: 'Pro', icon: '✺', disabled: true },
       { id: 'gemini', label: 'Gemini 3 Flash', group: 'pro', badge: 'Pro', icon: '✦', disabled: true },
       { id: 'grok', label: 'Grok 4.1 Fast', group: 'pro', badge: 'Pro', icon: '◉', disabled: true },
@@ -73,8 +81,27 @@ function App() {
     if (providerId === 'deepl') {
       return 'deepl';
     }
+    if (providerId === 'llm') {
+      return 'llm';
+    }
     return 'google';
   }, [providerId]);
+
+  const llmConfigCandidate = useMemo(
+    () => ({
+      endpoint: llmEndpoint.trim(),
+      apiKey: llmApiKey.trim(),
+      model: llmModel.trim(),
+      temperature: Number(llmTemperature),
+      maxTokens: Number(llmMaxTokens),
+      timeoutMs: Number(llmTimeoutMs),
+    }),
+    [llmEndpoint, llmApiKey, llmModel, llmMaxTokens, llmTemperature, llmTimeoutMs],
+  );
+  const llmConfig = useMemo(
+    () => normalizeLiteLlmConfig(llmConfigCandidate),
+    [llmConfigCandidate],
+  );
 
   useEffect(() => {
     void (async () => {
@@ -82,12 +109,35 @@ function App() {
       setIsProUser(proAvailable);
     })();
   }, []);
+  useEffect(() => {
+    if (!llmConfig) {
+      return;
+    }
+    void getChrome().storage?.sync?.set?.({ liteLlmConfig: llmConfig });
+  }, [llmConfig]);
 
   useEffect(() => {
     if (providerId === 'deepl' && !isProUser) {
       void setProviderId('google');
     }
   }, [providerId, isProUser, setProviderId]);
+
+  useEffect(() => {
+    const chromeApi = getChrome();
+    void (async () => {
+      const payload = await chromeApi.storage?.sync?.get?.(['liteLlmConfig']);
+      const existing = normalizeLiteLlmConfig(payload?.liteLlmConfig);
+      if (!existing) {
+        return;
+      }
+      setLlmEndpoint(existing.endpoint);
+      setLlmApiKey(existing.apiKey);
+      setLlmModel(existing.model);
+      setLlmTemperature(String(existing.temperature));
+      setLlmMaxTokens(String(existing.maxTokens));
+      setLlmTimeoutMs(String(existing.timeoutMs));
+    })();
+  }, []);
 
   return (
     <main className="sidepanel-shell">
@@ -192,6 +242,19 @@ function App() {
               placeholder="Please type or paste text..."
               onChange={(event) => setSourceText(event.target.value)}
             />
+            {providerId === 'llm' ? (
+              <div className="lang-row" style={{ marginTop: 12, flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+                <input value={llmEndpoint} onChange={(event) => setLlmEndpoint(event.target.value)} placeholder="LiteLLM endpoint (https://...)" />
+                <input value={llmApiKey} onChange={(event) => setLlmApiKey(event.target.value)} placeholder="LiteLLM API key" type="password" />
+                <input value={llmModel} onChange={(event) => setLlmModel(event.target.value)} placeholder="Model (e.g. gpt-5.4-mini)" />
+                <div className="lang-row">
+                  <input value={llmTemperature} onChange={(event) => setLlmTemperature(event.target.value)} placeholder="Temperature" />
+                  <input value={llmMaxTokens} onChange={(event) => setLlmMaxTokens(event.target.value)} placeholder="Max tokens" />
+                  <input value={llmTimeoutMs} onChange={(event) => setLlmTimeoutMs(event.target.value)} placeholder="Timeout ms" />
+                </div>
+                {llmConfig ? null : <span className="error-text">LLM config invalid: endpoint, api key, model, and numeric limits are required.</span>}
+              </div>
+            ) : null}
 
             <div className="action-row">
               <div className="left-actions">
@@ -220,11 +283,18 @@ function App() {
                     setError(null);
                     setIsTranslating(true);
                     try {
+                      if (providerId === 'llm' && !llmConfig) {
+                        throw new Error('CONFIG_MISSING');
+                      }
+                      if (providerId === 'llm' && llmConfig) {
+                        await getChrome().storage?.sync?.set?.({ liteLlmConfig: llmConfig });
+                      }
                       const translatedText = await requestSidePanelTranslation(sendMessage, {
                         sourceLang,
                         targetLang,
                         providerId,
                         text: sourceText,
+                        liteLlmConfig: providerId === 'llm' ? llmConfig ?? undefined : undefined,
                       });
                       setResultText(translatedText);
                     } catch (nextError) {

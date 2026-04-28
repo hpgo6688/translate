@@ -10,7 +10,7 @@ export function buildServiceOptions(isProUser: boolean): ProviderOption[] {
   return [
     { id: 'google', label: 'Free Translation Service', tier: 'free' },
     { id: 'deepl', label: 'DeepL Pro', tier: 'pro', disabled: !isProUser, badge: 'Pro' },
-    { id: 'gpt-5-mini', label: 'GPT-5 mini', tier: 'pro', disabled: true, badge: 'Pro' },
+    { id: 'llm', label: 'LiteLLM Custom', tier: 'pro', disabled: false, badge: 'Pro' },
     { id: 'claude-haiku', label: 'Claude Haiku 4.5', tier: 'pro', disabled: true, badge: 'Pro' },
   ];
 }

@@ -14,6 +14,7 @@ export type TranslateOptions = {
   targetLang: string;
   signal: AbortSignal;
   apiKey?: string;
+  providerConfig?: unknown;
 };
 
 export type ProviderErrorCode =

@@ -1,4 +1,5 @@
 import type { ExtensionProtocolMap } from '@/utils/messaging';
+import type { LiteLlmConfig } from '@/utils/litellm-config';
 
 type SidePanelChrome = {
   sidePanel?: {
@@ -27,6 +28,7 @@ export async function requestSidePanelTranslation(
     targetLang: string;
     providerId: string;
     text: string;
+    liteLlmConfig?: LiteLlmConfig;
   },
 ): Promise<string> {
   const response = await sendMessageLike('TRANSLATE_TEXT', payload);

@@ -1,4 +1,5 @@
 import { defineExtensionMessaging } from '@webext-core/messaging';
+import type { LiteLlmConfig } from '@/utils/litellm-config';
 
 export interface TranslateBatchMessage {
   tabId?: number;
@@ -6,6 +7,7 @@ export interface TranslateBatchMessage {
   targetLang: string;
   providerId: string;
   segments: Array<{ id: string; text: string }>;
+  liteLlmConfig?: LiteLlmConfig;
 }
 
 export interface TranslateTextMessage {
@@ -13,6 +15,7 @@ export interface TranslateTextMessage {
   targetLang: string;
   providerId: string;
   text: string;
+  liteLlmConfig?: LiteLlmConfig;
 }
 
 export interface SettingsChangedMessage {

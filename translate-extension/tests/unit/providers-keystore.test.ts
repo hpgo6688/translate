@@ -200,4 +200,82 @@ describe('providers and keystore', () => {
     expect(providerKeyStore.getProviderConfig('google')?.enabled).toBe(true);
     providerKeyStore.dispose();
   });
+
+  it('llm provider throws config missing when endpoint/model/key absent', async () => {
+    const { liteLlmProvider } = await import('@/core/translators/litellm');
+    const iterator = liteLlmProvider.translate(
+      [{ id: '1', text: 'hello' }],
+      { sourceLang: 'en', targetLang: 'zh-CN', signal: new AbortController().signal },
+    )[Symbol.asyncIterator]();
+    await expect(iterator.next()).rejects.toMatchObject({
+      code: 'PROVIDER_KEY_MISSING',
+    });
+  });
+
+  it('llm provider returns translated text when LiteLLM responds correctly', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: '你好' } }],
+        }),
+      ),
+    );
+    const { liteLlmProvider } = await import('@/core/translators/litellm');
+    const chunks = await collect(
+      liteLlmProvider.translate(
+        [{ id: '1', text: 'hello' }],
+        {
+          sourceLang: 'en',
+          targetLang: 'zh-CN',
+          signal: new AbortController().signal,
+          providerConfig: {
+            endpoint: 'https://litellm.example.com',
+            apiKey: 'token',
+            model: 'gpt-5.4-mini',
+            temperature: 0.2,
+            maxTokens: 256,
+            timeoutMs: 20000,
+          },
+        },
+      ),
+    );
+    expect(chunks[0]).toEqual({ id: '1', text: '你好', done: true });
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://litellm.example.com/chat/completions',
+      expect.any(Object),
+    );
+  });
+
+  it('llm provider normalizes endpoints ending with models', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: 'bonjour' } }],
+        }),
+      ),
+    );
+    const { liteLlmProvider } = await import('@/core/translators/litellm');
+    await collect(
+      liteLlmProvider.translate(
+        [{ id: '1', text: 'hello' }],
+        {
+          sourceLang: 'en',
+          targetLang: 'fr',
+          signal: new AbortController().signal,
+          providerConfig: {
+            endpoint: 'https://litellm.cmex.corp/models',
+            apiKey: 'token',
+            model: 'claude-sonnet-4-5',
+            temperature: 0.2,
+            maxTokens: 256,
+            timeoutMs: 20000,
+          },
+        },
+      ),
+    );
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://litellm.cmex.corp/chat/completions',
+      expect.any(Object),
+    );
+  });
 });

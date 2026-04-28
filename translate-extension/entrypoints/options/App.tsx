@@ -237,6 +237,7 @@ export default function App() {
               <select {...generalForm.register('defaultProviderId')} className="w-full rounded border p-2">
                 <option value="google">Google</option>
                 <option value="deepl">DeepL</option>
+                <option value="llm">LiteLLM</option>
               </select>
               <label className="flex items-center gap-2">
                 <input type="checkbox" {...generalForm.register('masterEnabled')} /> master enable

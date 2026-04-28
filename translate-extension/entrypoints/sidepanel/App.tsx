@@ -281,6 +281,7 @@ function App() {
                 onClick={() => {
                   void (async () => {
                     setError(null);
+                    setResultText('');
                     setIsTranslating(true);
                     try {
                       if (providerId === 'llm' && !llmConfig) {
@@ -311,7 +312,15 @@ function App() {
           </section>
 
           <section className="result-card">
-            <div className="result-body">{error ? <span className="error-text">{error}</span> : resultText}</div>
+            <div className="result-body">
+              {error ? (
+                <span className="error-text">{error}</span>
+              ) : isTranslating ? (
+                <span className="loading-text">Translating with AI...</span>
+              ) : (
+                resultText
+              )}
+            </div>
           </section>
           </div>
 

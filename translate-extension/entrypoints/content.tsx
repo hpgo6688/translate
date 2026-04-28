@@ -280,6 +280,10 @@ function showSelectionTranslation(text: string, x: number, y: number): void {
   card.style.top = `${Math.max(8, Math.min(maxTop, y + 8))}px`;
 }
 
+function showSelectionLoading(x: number, y: number): void {
+  showSelectionTranslation('Translating...', x, y);
+}
+
 function updatePinButtonStyle(): void {
   if (!selectionCardPinButton) {
     return;
@@ -1135,12 +1139,17 @@ export default defineContentScript({
       const rect = range.getBoundingClientRect();
       selectionRequestSeq += 1;
       const requestId = `selection-${selectionRequestSeq}`;
-      selectionRequestById.set(requestId, { x: rect.left, y: rect.bottom });
+      const anchor = { x: rect.left, y: rect.bottom };
+      selectionRequestById.set(requestId, anchor);
+      showSelectionLoading(anchor.x, anchor.y);
       void sendMessage('TRANSLATE_BATCH', {
         sourceLang,
         targetLang,
         providerId,
         segments: [{ id: requestId, text }],
+      }).catch(() => {
+        selectionRequestById.delete(requestId);
+        showSelectionTranslation('Translation failed. Please retry.', anchor.x, anchor.y);
       });
     };
     const mouseupListener = (event: MouseEvent) => {

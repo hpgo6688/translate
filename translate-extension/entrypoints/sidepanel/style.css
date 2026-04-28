@@ -420,6 +420,11 @@ body {
   font-size: 14px;
 }
 
+.loading-text {
+  color: #c7d2fe;
+  font-style: italic;
+}
+
 .error-text {
   color: #fda4af;
 }

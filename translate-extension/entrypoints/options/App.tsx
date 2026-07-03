@@ -3,8 +3,6 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 
 import { cacheDb } from '@/core/cache/db';
-import { masterPasswordManager } from '@/core/keystore/master-password';
-import { providerKeyStore } from '@/core/keystore/provider-keys';
 import {
   cacheSchema,
   displaySchema,
@@ -13,7 +11,6 @@ import {
   useSettingsStore,
 } from '@/stores/settings';
 import { setupI18n } from '@/utils/i18n';
-import { onMessage, sendMessage } from '@/utils/messaging';
 
 type Route = 'general' | 'display' | 'shortcuts' | 'providers' | 'cache' | 'about';
 const hoverHotkeyOptions = ['Option', 'Control', 'Shift'] as const;
@@ -47,11 +44,13 @@ function getChrome(): ExtensionChrome {
 }
 
 export default function App() {
+  const settings = useSettingsStore();
   const [route, setRoute] = useState<Route>(() => normalizeRouteFromHash(window.location.hash));
   const [shortcutWarning, setShortcutWarning] = useState<string | null>(null);
-  const [unlockBannerVisible, setUnlockBannerVisible] = useState(false);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
-  const settings = useSettingsStore();
+  const [deepseekApiKey, setDeepseekApiKey] = useState(
+    () => settings.providers.deepseek?.apiKey ?? '',
+  );
 
   const nav = useMemo(
     () =>
@@ -92,10 +91,8 @@ export default function App() {
     setTimeout(() => setSaveNotice(null), 1600);
   };
   useEffect(() => {
-    return onMessage('NEEDS_UNLOCK', () => {
-      setUnlockBannerVisible(true);
-    });
-  }, []);
+    setDeepseekApiKey(settings.providers.deepseek?.apiKey ?? '');
+  }, [settings.providers.deepseek?.apiKey]);
   useEffect(() => {
     const syncFromHash = (): void => {
       setRoute(normalizeRouteFromHash(window.location.hash));
@@ -168,35 +165,6 @@ export default function App() {
 
   return (
     <main className="min-h-screen bg-slate-100 p-6 text-slate-900">
-      {unlockBannerVisible && (
-        <div className="mb-3 rounded border border-amber-300 bg-amber-50 p-2 text-sm">
-          Unlock required for encrypted provider keys.
-          <button
-            className="ml-2 rounded border px-2 py-0.5"
-            onClick={() => {
-              void (async () => {
-                const password = window.prompt('Unlock master password');
-                if (!password) {
-                  return;
-                }
-                try {
-                  await masterPasswordManager.unlock(password);
-                  await sendMessage('UNLOCK_RESULT', { ok: true, password });
-                  setUnlockBannerVisible(false);
-                  changeRoute('providers');
-                } catch {
-                  await sendMessage('UNLOCK_RESULT', {
-                    ok: false,
-                    error: 'Incorrect password',
-                  });
-                }
-              })();
-            }}
-          >
-            Unlock
-          </button>
-        </div>
-      )}
       <h1 className="mb-4 text-xl font-semibold">Options</h1>
       {saveNotice ? (
         <p className="mb-3 rounded border border-emerald-300 bg-emerald-50 p-2 text-sm text-emerald-800">
@@ -235,9 +203,7 @@ export default function App() {
               <input {...generalForm.register('defaultSourceLang')} placeholder="default source (auto)" className="w-full rounded border p-2" />
               <input {...generalForm.register('defaultTargetLang')} placeholder="default target" className="w-full rounded border p-2" />
               <select {...generalForm.register('defaultProviderId')} className="w-full rounded border p-2">
-                <option value="google">Google</option>
-                <option value="deepl">DeepL</option>
-                <option value="llm">LiteLLM</option>
+                <option value="deepseek">DeepSeek</option>
               </select>
               <label className="flex items-center gap-2">
                 <input type="checkbox" {...generalForm.register('masterEnabled')} /> master enable
@@ -329,27 +295,39 @@ export default function App() {
                         type="password"
                         placeholder={`${providerId} api key`}
                         className="flex-1 rounded border p-2"
-                        onKeyDown={(event) => {
-                          if (event.key !== 'Enter') {
-                            return;
+                        value={providerId === 'deepseek' ? deepseekApiKey : ''}
+                        onChange={(event) => {
+                          if (providerId === 'deepseek') {
+                            setDeepseekApiKey(event.target.value);
                           }
-                          runAsync(async () => {
-                            const value = (event.target as HTMLInputElement).value.trim();
-                            if (!value) {
-                              return;
-                            }
-                            if (!masterPasswordManager.getKey()) {
-                              const pwd = window.prompt('Unlock master password');
-                              if (!pwd) {
-                                return;
-                              }
-                              await masterPasswordManager.unlock(pwd);
-                            }
-                            await providerKeyStore.setProviderKey(providerId, value);
-                            (event.target as HTMLInputElement).value = '';
-                          });
                         }}
                       />
+                      <button
+                        type="button"
+                        className="rounded border px-3 py-1"
+                        onClick={() => {
+                          runAsync(async () => {
+                            const apiKey = deepseekApiKey.trim();
+                            if (!apiKey) {
+                              setSaveNotice('API key cannot be empty.');
+                              setTimeout(() => setSaveNotice(null), 1600);
+                              return;
+                            }
+                            const ok = await settings.update({
+                              providers: {
+                                ...settings.providers,
+                                [providerId]: {
+                                  ...config,
+                                  apiKey,
+                                },
+                              },
+                            });
+                            reportSaveResult(ok);
+                          });
+                        }}
+                      >
+                        Save Key
+                      </button>
                     </div>
                   )}
                 </div>
@@ -387,8 +365,8 @@ export default function App() {
               <input type="number" {...cacheForm.register('ttlDays', { valueAsNumber: true })} className="w-full rounded border p-2" />
               <input type="number" {...cacheForm.register('maxRecords', { valueAsNumber: true })} className="w-full rounded border p-2" />
               <div className="flex flex-wrap gap-2">
-                <button type="button" className="rounded border px-3 py-1" onClick={() => void cacheDb.clearByProvider('google')}>
-                  Clear Google cache
+                <button type="button" className="rounded border px-3 py-1" onClick={() => void cacheDb.clearByProvider('deepseek')}>
+                  Clear DeepSeek cache
                 </button>
                 <button type="button" className="rounded border px-3 py-1" onClick={() => void cacheDb.clearByLanguagePair('en', 'zh-CN')}>
                   Clear en→zh-CN

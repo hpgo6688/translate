@@ -22,18 +22,16 @@ describe('sidepanel actions', () => {
     const result = await requestSidePanelTranslation(sendMessage, {
       sourceLang: 'en',
       targetLang: 'zh-CN',
-      providerId: 'google',
+      providerId: 'deepseek',
       text: 'hello',
-      liteLlmConfig: undefined,
     });
 
     expect(result).toBe('你好');
     expect(sendMessage).toHaveBeenCalledWith('TRANSLATE_TEXT', {
       sourceLang: 'en',
       targetLang: 'zh-CN',
-      providerId: 'google',
+      providerId: 'deepseek',
       text: 'hello',
-      liteLlmConfig: undefined,
     });
   });
 });

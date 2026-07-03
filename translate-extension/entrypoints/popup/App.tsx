@@ -1,12 +1,9 @@
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useMemo, useState } from 'react';
 
 import { PopupSwitch } from '@/components/ui/popup-switch';
 import { SearchableSelect, type SelectOption } from '@/components/ui/searchable-select';
-import { masterPasswordManager } from '@/core/keystore/master-password';
 import { openExtensionSidePanel } from '@/entrypoints/sidepanel/actions';
 import { usePopupStore } from '@/stores/popup';
-import { liteLlmDefaults, normalizeLiteLlmConfig } from '@/utils/litellm-config';
-import { onMessage, sendMessage } from '@/utils/messaging';
 import './App.css';
 
 type PreferenceRowProps = {
@@ -46,57 +43,23 @@ function PreferenceRow({ label, trailing, disabled = false, badge }: PreferenceR
 }
 
 function App() {
-  const [showUnlock, setShowUnlock] = useState(false);
-  const [unlockPassword, setUnlockPassword] = useState('');
-  const [unlockError, setUnlockError] = useState<string | null>(null);
   const [sourceLang, setSourceLang] = useState('auto');
   const [hoverMode, setHoverMode] = useState('option');
   const [siteMode, setSiteMode] = useState('always');
   const [hoverEnabled, setHoverEnabled] = useState(true);
   const [translateEnglishPages, setTranslateEnglishPages] = useState(false);
-  const [llmEndpoint, setLlmEndpoint] = useState('');
-  const [llmApiKey, setLlmApiKey] = useState('');
-  const [llmModel, setLlmModel] = useState('');
-  const [llmTemperature, setLlmTemperature] = useState(String(liteLlmDefaults.temperature));
-  const [llmMaxTokens, setLlmMaxTokens] = useState(String(liteLlmDefaults.maxTokens));
-  const [llmTimeoutMs, setLlmTimeoutMs] = useState(String(liteLlmDefaults.timeoutMs));
 
   const {
     enabled,
     targetLang,
-    providerId,
     selectionEnabled,
     selectionMode,
     setEnabled,
     setTargetLang,
-    setProviderId,
     setSelectionEnabled,
     setSelectionMode,
   } = usePopupStore();
 
-  const proProviderLocked = providerId !== 'deepl';
-
-  const providerOptions = useMemo(
-    () => [
-      { id: 'google', label: 'Google' },
-      { id: 'deepl', label: 'DeepL' },
-      { id: 'deepseek', label: 'DeepSeek v4 Pro' },
-      { id: 'llm', label: 'LiteLLM' },
-    ],
-    [],
-  );
-  const llmConfig = useMemo(
-    () =>
-      normalizeLiteLlmConfig({
-        endpoint: llmEndpoint.trim(),
-        apiKey: llmApiKey.trim(),
-        model: llmModel.trim(),
-        temperature: Number(llmTemperature),
-        maxTokens: Number(llmMaxTokens),
-        timeoutMs: Number(llmTimeoutMs),
-      }),
-    [llmApiKey, llmEndpoint, llmMaxTokens, llmModel, llmTemperature, llmTimeoutMs],
-  );
   const sourceLangOptions = useMemo<SelectOption[]>(
     () => [
       { value: 'auto', label: 'Auto Detect' },
@@ -115,40 +78,6 @@ function App() {
     () => sourceLangOptions.filter((item) => item.value !== 'auto'),
     [sourceLangOptions],
   );
-
-  useEffect(() => {
-    const remove = onMessage('NEEDS_UNLOCK', () => {
-      setShowUnlock(true);
-    });
-    return remove;
-  }, []);
-  useEffect(() => {
-    if (!llmConfig) {
-      return;
-    }
-    const extensionChrome = (globalThis as {
-      chrome?: { storage?: { sync?: { set?: (items: Record<string, unknown>) => Promise<void> } } };
-    }).chrome;
-    void extensionChrome?.storage?.sync?.set?.({ liteLlmConfig: llmConfig });
-  }, [llmConfig]);
-  useEffect(() => {
-    const extensionChrome = (globalThis as {
-      chrome?: { storage?: { sync?: { get?: (keys: string[]) => Promise<Record<string, unknown>> } } };
-    }).chrome;
-    void (async () => {
-      const payload = await extensionChrome?.storage?.sync?.get?.(['liteLlmConfig']);
-      const existing = normalizeLiteLlmConfig(payload?.liteLlmConfig);
-      if (!existing) {
-        return;
-      }
-      setLlmEndpoint(existing.endpoint);
-      setLlmApiKey(existing.apiKey);
-      setLlmModel(existing.model);
-      setLlmTemperature(String(existing.temperature));
-      setLlmMaxTokens(String(existing.maxTokens));
-      setLlmTimeoutMs(String(existing.timeoutMs));
-    })();
-  }, []);
 
   return (
     <main className="popup-shell">
@@ -198,64 +127,10 @@ function App() {
         </div>
 
         <div className="px-[10px] service-card py-[14px]">
-          <label className="service-row">
+          <div className="service-row">
             <span className="service-label">Service:</span>
-            <select
-              className="inline-select"
-              value={providerId}
-              onChange={(event) => {
-                void setProviderId(event.target.value);
-                if (event.target.value === 'llm' && llmConfig) {
-                  const extensionChrome = (globalThis as {
-                    chrome?: { storage?: { sync?: { set?: (items: Record<string, unknown>) => Promise<void> } } };
-                  }).chrome;
-                  void extensionChrome?.storage?.sync?.set?.({ liteLlmConfig: llmConfig });
-                }
-              }}
-            >
-              {providerOptions.map((provider) => (
-                <option key={provider.id} value={provider.id}>
-                  {provider.id === 'google'
-                    ? 'Free Translation Service'
-                    : provider.id === 'deepl'
-                      ? 'DeepL Pro'
-                      : provider.id === 'deepseek'
-                        ? 'DeepSeek v4 Pro'
-                        : 'LiteLLM Custom'}
-                </option>
-              ))}
-            </select>
-          </label>
-          {providerId === 'llm' ? (
-            <>
-              <label className="service-row muted">
-                <span className="service-label">Endpoint:</span>
-                <input className="inline-select" value={llmEndpoint} onChange={(event) => setLlmEndpoint(event.target.value)} />
-              </label>
-              <label className="service-row muted">
-                <span className="service-label">API Key:</span>
-                <input className="inline-select" type="password" value={llmApiKey} onChange={(event) => setLlmApiKey(event.target.value)} />
-              </label>
-              <label className="service-row muted">
-                <span className="service-label">Model:</span>
-                <input className="inline-select" value={llmModel} onChange={(event) => setLlmModel(event.target.value)} />
-              </label>
-              <label className="service-row muted">
-                <span className="service-label">Temp/Tokens/Timeout:</span>
-                <input
-                  className="inline-select"
-                  value={`${llmTemperature}/${llmMaxTokens}/${llmTimeoutMs}`}
-                  onChange={(event) => {
-                    const [temp, max, timeout] = event.target.value.split('/');
-                    setLlmTemperature(temp ?? '');
-                    setLlmMaxTokens(max ?? '');
-                    setLlmTimeoutMs(timeout ?? '');
-                  }}
-                />
-              </label>
-              {!llmConfig ? <p className="text-xs text-red-600">LLM config invalid</p> : null}
-            </>
-          ) : null}
+            <span className="inline-select">DeepSeek v4 Pro</span>
+          </div>
           <label className="service-row muted">
             <span className="service-label">AI Expert:</span>
             <select className="inline-select" defaultValue="general">
@@ -353,7 +228,6 @@ function App() {
         />
         <PreferenceRow
           label="Always translate English pages"
-          disabled={proProviderLocked}
           trailing={
             <PopupSwitch
               checked={translateEnglishPages}
@@ -380,45 +254,6 @@ function App() {
           More
         </button>
       </footer>
-
-      {showUnlock && (
-        <div className="unlock-panel">
-          <p className="unlock-title">Unlock required</p>
-          <input
-            type="password"
-            className="unlock-input"
-            value={unlockPassword}
-            onChange={(event) => setUnlockPassword(event.target.value)}
-            placeholder="Master password"
-          />
-          {unlockError ? <p className="unlock-error">{unlockError}</p> : null}
-          <button
-            className="unlock-btn"
-            onClick={() => {
-              void (async () => {
-                try {
-                  await masterPasswordManager.unlock(unlockPassword);
-                  await sendMessage('UNLOCK_RESULT', {
-                    ok: true,
-                    password: unlockPassword,
-                  });
-                  setUnlockError(null);
-                  setUnlockPassword('');
-                  setShowUnlock(false);
-                } catch {
-                  setUnlockError('Incorrect password');
-                  await sendMessage('UNLOCK_RESULT', {
-                    ok: false,
-                    error: 'Incorrect password',
-                  });
-                }
-              })();
-            }}
-          >
-            Unlock
-          </button>
-        </div>
-      )}
     </main>
   );
 }

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { resolveProviderId } from '@/core/translators';
 
 type PopupState = {
   enabled: boolean;
@@ -55,7 +56,7 @@ export const usePopupStore = create<PopupState>()(
     (set) => ({
       enabled: false,
       targetLang: 'zh-CN',
-      providerId: 'google',
+      providerId: 'deepseek',
       selectionEnabled: false,
       selectionMode: 'direct',
       sessionChars: 0,
@@ -74,8 +75,9 @@ export const usePopupStore = create<PopupState>()(
         await getChrome().storage.sync.set({ popupTargetLang: targetLang });
       },
       async setProviderId(providerId) {
-        set({ providerId });
-        await getChrome().storage.sync.set({ popupProviderId: providerId });
+        const normalized = resolveProviderId(providerId);
+        set({ providerId: normalized });
+        await getChrome().storage.sync.set({ popupProviderId: normalized });
       },
       async setSelectionEnabled(selectionEnabled) {
         set({ selectionEnabled });

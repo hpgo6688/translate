@@ -1,21 +1,15 @@
-import { decrypt, encrypt } from '@/utils/crypto';
-
-import { masterPasswordManager } from '@/core/keystore/master-password';
-
-const PROVIDER_KEY_BAG = 'encryptedProviderKeys';
+const PROVIDER_KEY_BAG = 'providerKeys';
 const PROVIDER_CONFIG_KEY = 'providerConfigs';
-
-type EncryptedProviderKey = {
-  ciphertext: string;
-  iv: string;
-};
+const SETTINGS_KEY = 'settings';
 
 export type ProviderConfig = {
   enabled: boolean;
   requiresKey: boolean;
+  apiKey?: string;
 };
 
 type ProviderConfigRecord = Record<string, ProviderConfig>;
+type ProviderKeyRecord = Record<string, string>;
 
 type ChangeRecord = Record<string, { oldValue?: unknown; newValue?: unknown }>;
 type ChangeListener = (changes: ChangeRecord, areaName: string) => void;
@@ -79,45 +73,32 @@ export class ProviderKeyStore {
   }
 
   async setProviderKey(providerId: string, plaintextKey: string): Promise<void> {
-    const key = masterPasswordManager.getKey();
-    if (!key) {
-      throw new Error('NEEDS_UNLOCK');
-    }
-
-    const encrypted = await encrypt(key, plaintextKey);
-    const bag = await this.getEncryptedKeyBag();
-    bag[providerId] = encrypted;
+    const bag = await this.getKeyBag();
+    bag[providerId] = plaintextKey;
     await getChrome().storage.local.set({ [PROVIDER_KEY_BAG]: bag });
   }
 
   async getProviderKey(providerId: string): Promise<string | null> {
-    const key = masterPasswordManager.getKey();
-    if (!key) {
-      throw new Error('NEEDS_UNLOCK');
+    const fromLocal = (await this.getKeyBag())[providerId]?.trim();
+    if (fromLocal) {
+      return fromLocal;
     }
 
-    const bag = await this.getEncryptedKeyBag();
-    const encrypted = bag[providerId];
-    if (!encrypted) {
-      return null;
-    }
-    return decrypt(key, encrypted.ciphertext, encrypted.iv);
+    const syncPayload = await getChrome().storage.sync.get([SETTINGS_KEY]);
+    const settings = syncPayload[SETTINGS_KEY] as { providers?: ProviderConfigRecord } | undefined;
+    const fromSettings = settings?.providers?.[providerId]?.apiKey?.trim();
+    return fromSettings || null;
   }
 
   async clearProviderKey(providerId: string): Promise<void> {
-    const bag = await this.getEncryptedKeyBag();
+    const bag = await this.getKeyBag();
     delete bag[providerId];
     await getChrome().storage.local.set({ [PROVIDER_KEY_BAG]: bag });
   }
 
-  async hasEncryptedKeys(): Promise<boolean> {
-    const bag = await this.getEncryptedKeyBag();
-    return Object.keys(bag).length > 0;
-  }
-
-  private async getEncryptedKeyBag(): Promise<Record<string, EncryptedProviderKey>> {
+  private async getKeyBag(): Promise<ProviderKeyRecord> {
     const result = await getChrome().storage.local.get(PROVIDER_KEY_BAG);
-    return (result[PROVIDER_KEY_BAG] as Record<string, EncryptedProviderKey> | undefined) ?? {};
+    return (result[PROVIDER_KEY_BAG] as ProviderKeyRecord | undefined) ?? {};
   }
 }
 

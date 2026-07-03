@@ -7,6 +7,7 @@ import { applyStyleVariables, defaultTranslationStyle, listenStyleChanges } from
 import { observeInViewport } from '@/core/dom/viewport';
 import { collectTranslatableParagraphs } from '@/core/dom/walker';
 import { mountFloatingButton } from '@/entrypoints/content/floating-button';
+import { resolveProviderId } from '@/core/translators';
 import { sendMessage } from '@/utils/messaging';
 
 type ParagraphState = {
@@ -42,7 +43,7 @@ let selectionCardServiceLabelElement: HTMLSpanElement | null = null;
 let selectionCardServiceMenuElement: HTMLDivElement | null = null;
 let selectionCardServiceButtonElement: HTMLButtonElement | null = null;
 let selectionCardPinned = false;
-let selectionCardProviderId = 'google';
+let selectionCardProviderId = 'deepseek';
 let selectionCardProviderChangeHandler: ((providerId: string) => void) | null = null;
 const translatedParagraphIds = new Set<string>();
 let currentMode: DisplayMode = 'below';
@@ -187,13 +188,11 @@ function isSelectionMode(value: unknown): value is 'direct' | 'icon' | 'mini-ico
 }
 
 const SELECTION_CARD_PROVIDER_OPTIONS: Array<{ id: string; label: string; tier: 'free' | 'pro' }> = [
-  { id: 'google', label: 'Free Translation Service', tier: 'free' },
-  { id: 'deepl', label: 'DeepL Pro', tier: 'pro' },
   { id: 'deepseek', label: 'DeepSeek v4 Pro', tier: 'pro' },
 ];
 
 function getSelectionProviderLabel(providerId: string): string {
-  return SELECTION_CARD_PROVIDER_OPTIONS.find((item) => item.id === providerId)?.label ?? 'Free Translation Service';
+  return SELECTION_CARD_PROVIDER_OPTIONS.find((item) => item.id === providerId)?.label ?? 'DeepSeek v4 Pro';
 }
 
 function resolveSelectionCardFontSize(text: string): number {
@@ -956,7 +955,7 @@ export default defineContentScript({
     let popupEnabled = isBoolean(initial.popupEnabled) ? initial.popupEnabled : false;
     let sourceLang = 'auto';
     let targetLang = 'zh-CN';
-    let providerId = 'google';
+    let providerId = 'deepseek';
     let masterEnabled = true;
     let popupSelectionEnabled = isBoolean(initial.popupSelectionEnabled) ? initial.popupSelectionEnabled : false;
     let popupSelectionMode: 'direct' | 'icon' | 'mini-icon' | 'ctrl' | 'option' | 'shift' = isSelectionMode(
@@ -986,6 +985,7 @@ export default defineContentScript({
     if (isNonEmptyString(initial.popupProviderId)) {
       providerId = initial.popupProviderId;
     }
+    providerId = resolveProviderId(providerId);
     selectionCardProviderId = providerId;
     selectionCardProviderChangeHandler = (nextProviderId: string) => {
       providerId = nextProviderId;
@@ -1044,7 +1044,7 @@ export default defineContentScript({
           const hasProviderChanged = providerId !== nextGeneral.defaultProviderId;
           sourceLang = nextGeneral.defaultSourceLang;
           targetLang = nextGeneral.defaultTargetLang;
-          providerId = nextGeneral.defaultProviderId;
+          providerId = resolveProviderId(nextGeneral.defaultProviderId);
           masterEnabled = nextGeneral.masterEnabled;
           shouldRescan = shouldRescan || hasLanguageChanged || hasProviderChanged;
         }
@@ -1059,7 +1059,7 @@ export default defineContentScript({
       }
       if (isNonEmptyString(changes.popupProviderId?.newValue)) {
         const hasPopupProviderChanged = providerId !== changes.popupProviderId.newValue;
-        providerId = changes.popupProviderId.newValue;
+        providerId = resolveProviderId(changes.popupProviderId.newValue);
         selectionCardProviderId = providerId;
         updateSelectionCardProviderUI();
         shouldRescan = shouldRescan || hasPopupProviderChanged;

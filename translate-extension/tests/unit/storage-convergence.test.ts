@@ -50,7 +50,7 @@ describe('storage convergence', () => {
     vi.restoreAllMocks();
     document.documentElement.innerHTML = '<body><article><p>test</p></article></body>';
     (globalThis as { chrome?: unknown }).chrome = createChromeMock();
-    usePopupStore.setState({ enabled: false, targetLang: 'zh-CN', providerId: 'google' });
+    usePopupStore.setState({ enabled: false, targetLang: 'zh-CN', providerId: 'deepseek' });
     useSettingsStore.setState({
       ...useSettingsStore.getState(),
       display: {
@@ -76,7 +76,7 @@ describe('storage convergence', () => {
     await (globalThis as unknown as { chrome: ReturnType<typeof createChromeMock> }).chrome.storage.sync.set({
       popupEnabled: true,
       popupTargetLang: 'ja',
-      popupProviderId: 'deepl',
+      popupProviderId: 'deepseek',
       settings: {
         ...useSettingsStore.getState(),
         display: {
@@ -103,7 +103,7 @@ describe('storage convergence', () => {
     expect(elapsed).toBeLessThanOrEqual(1000);
     expect(usePopupStore.getState().enabled).toBe(true);
     expect(usePopupStore.getState().targetLang).toBe('ja');
-    expect(usePopupStore.getState().providerId).toBe('deepl');
+    expect(usePopupStore.getState().providerId).toBe('deepseek');
     expect(useSettingsStore.getState().display.displayMode).toBe('side-by-side');
     expect(updatedColor).toBe('#0f172a');
 

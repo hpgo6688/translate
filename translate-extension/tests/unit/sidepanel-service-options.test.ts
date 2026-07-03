@@ -3,31 +3,28 @@ import { describe, expect, it } from 'vitest';
 import { buildServiceOptions, resolveProviderWithFallback } from '@/entrypoints/sidepanel/service-options';
 
 describe('sidepanel service options', () => {
-  it('keeps pro provider disabled for free users', () => {
-    const options = buildServiceOptions(false);
-    const deeplOption = options.find((item) => item.id === 'deepl');
-    expect(deeplOption?.disabled).toBe(true);
+  it('returns only deepseek provider', () => {
+    const options = buildServiceOptions();
+    expect(options).toEqual([
+      { id: 'deepseek', label: 'DeepSeek v4 Pro', tier: 'pro', badge: 'Pro' },
+    ]);
   });
 
-  it('enables deepl option for pro users', () => {
-    const options = buildServiceOptions(true);
-    const deeplOption = options.find((item) => item.id === 'deepl');
-    expect(deeplOption?.disabled).toBe(false);
-  });
-
-  it('falls back to first available provider when active is unavailable', () => {
-    const options = buildServiceOptions(false);
-    const result = resolveProviderWithFallback('deepl', options);
+  it('keeps deepseek when active provider is available', () => {
+    const options = buildServiceOptions();
+    const result = resolveProviderWithFallback('deepseek', options);
     expect(result).toEqual({
-      nextProviderId: 'google',
-      changed: true,
+      nextProviderId: 'deepseek',
+      changed: false,
     });
   });
 
-  it('keeps llm option enabled for all users', () => {
-    const freeOptions = buildServiceOptions(false);
-    const proOptions = buildServiceOptions(true);
-    expect(freeOptions.find((item) => item.id === 'llm')?.disabled).toBeFalsy();
-    expect(proOptions.find((item) => item.id === 'llm')?.disabled).toBeFalsy();
+  it('falls back to deepseek when active provider is unknown', () => {
+    const options = buildServiceOptions();
+    const result = resolveProviderWithFallback('google', options);
+    expect(result).toEqual({
+      nextProviderId: 'deepseek',
+      changed: true,
+    });
   });
 });

@@ -6,14 +6,8 @@ export type ProviderOption = {
   badge?: string;
 };
 
-export function buildServiceOptions(isProUser: boolean): ProviderOption[] {
-  return [
-    { id: 'google', label: 'Free Translation Service', tier: 'free' },
-    { id: 'deepl', label: 'DeepL Pro', tier: 'pro', disabled: !isProUser, badge: 'Pro' },
-    { id: 'deepseek', label: 'DeepSeek v4 Pro', tier: 'pro', disabled: false, badge: 'Pro' },
-    { id: 'llm', label: 'LiteLLM Custom', tier: 'pro', disabled: false, badge: 'Pro' },
-    { id: 'claude-haiku', label: 'Claude Haiku 4.5', tier: 'pro', disabled: true, badge: 'Pro' },
-  ];
+export function buildServiceOptions(): ProviderOption[] {
+  return [{ id: 'deepseek', label: 'DeepSeek v4 Pro', tier: 'pro', badge: 'Pro' }];
 }
 
 export function resolveProviderWithFallback(
@@ -26,5 +20,5 @@ export function resolveProviderWithFallback(
   }
 
   const fallback = options.find((item) => !item.disabled) ?? options[0];
-  return { nextProviderId: fallback?.id ?? activeProviderId, changed: Boolean(fallback && fallback.id !== activeProviderId) };
+  return { nextProviderId: fallback?.id ?? 'deepseek', changed: Boolean(fallback && fallback.id !== activeProviderId) };
 }

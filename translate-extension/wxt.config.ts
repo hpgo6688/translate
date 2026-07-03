@@ -11,8 +11,7 @@ export default defineConfig({
       default_path: 'sidepanel.html',
     },
     host_permissions: [
-      'https://translate.googleapis.com/*',
-      'https://api-free.deepl.com/*',
+      'https://api.deepseek.com/*',
     ],
   },
 });

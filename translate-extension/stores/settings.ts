@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { z } from 'zod';
-import { liteLlmDefaults } from '@/utils/litellm-config';
 
 export const generalSchema = z.object({
   defaultSourceLang: z.string().min(2),
@@ -35,15 +34,7 @@ export const cacheSchema = z.object({
 export const providerItemSchema = z.object({
   enabled: z.boolean(),
   requiresKey: z.boolean(),
-});
-
-export const liteLlmSettingsSchema = z.object({
-  endpoint: z.string().trim(),
-  apiKey: z.string(),
-  model: z.string().trim(),
-  temperature: z.number().min(0).max(1.5),
-  maxTokens: z.number().int().min(32).max(4096),
-  timeoutMs: z.number().int().min(1000).max(60000),
+  apiKey: z.string().optional(),
 });
 
 export const settingsSchema = z.object({
@@ -51,7 +42,6 @@ export const settingsSchema = z.object({
   display: displaySchema,
   shortcuts: shortcutsSchema,
   providers: z.record(z.string(), providerItemSchema),
-  liteLlm: liteLlmSettingsSchema,
   cache: cacheSchema,
   localeOverride: z.string().nullable(),
 });
@@ -86,7 +76,7 @@ const initialSettings: SettingsState = {
   general: {
     defaultSourceLang: 'auto',
     defaultTargetLang: 'zh-CN',
-    defaultProviderId: 'google',
+    defaultProviderId: 'deepseek',
     masterEnabled: true,
   },
   display: {
@@ -102,16 +92,7 @@ const initialSettings: SettingsState = {
     hoverTranslateHotkey: 'Option',
   },
   providers: {
-    google: { enabled: true, requiresKey: false },
-    deepl: { enabled: false, requiresKey: true },
-    deepseek: { enabled: true, requiresKey: true },
-    llm: { enabled: false, requiresKey: false },
-  },
-  liteLlm: {
-    endpoint: 'https://litellm.example.com',
-    apiKey: '',
-    model: 'gpt-5.4-mini',
-    ...liteLlmDefaults,
+    deepseek: { enabled: true, requiresKey: true, apiKey: '' },
   },
   cache: {
     ttlDays: 30,
@@ -131,7 +112,6 @@ export const useSettingsStore = create<SettingsStore>()(
           display: merged.display,
           shortcuts: merged.shortcuts,
           providers: merged.providers,
-          liteLlm: merged.liteLlm,
           cache: merged.cache,
           localeOverride: merged.localeOverride,
         });
@@ -142,7 +122,6 @@ export const useSettingsStore = create<SettingsStore>()(
         await getChrome().storage.sync.set({
           settings: parsed.data,
           providerConfigs: parsed.data.providers,
-          liteLlmConfig: parsed.data.liteLlm,
           translationStyle: parsed.data.display,
         });
         return true;

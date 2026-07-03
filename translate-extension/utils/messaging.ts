@@ -1,5 +1,4 @@
 import { defineExtensionMessaging } from '@webext-core/messaging';
-import type { LiteLlmConfig } from '@/utils/litellm-config';
 
 export interface TranslateBatchMessage {
   tabId?: number;
@@ -7,7 +6,6 @@ export interface TranslateBatchMessage {
   targetLang: string;
   providerId: string;
   segments: Array<{ id: string; text: string }>;
-  liteLlmConfig?: LiteLlmConfig;
 }
 
 export interface TranslateTextMessage {
@@ -15,29 +13,16 @@ export interface TranslateTextMessage {
   targetLang: string;
   providerId: string;
   text: string;
-  liteLlmConfig?: LiteLlmConfig;
 }
 
 export interface SettingsChangedMessage {
   keys: string[];
 }
 
-export interface NeedsUnlockMessage {
-  reason: 'missing_master_key';
-}
-
-export interface UnlockResultMessage {
-  ok: boolean;
-  password?: string;
-  error?: string;
-}
-
 export interface ExtensionProtocolMap {
   TRANSLATE_BATCH(data: TranslateBatchMessage): { accepted: boolean };
   TRANSLATE_TEXT(data: TranslateTextMessage): { text: string };
   SETTINGS_CHANGED(data: SettingsChangedMessage): void;
-  NEEDS_UNLOCK(data: NeedsUnlockMessage): void;
-  UNLOCK_RESULT(data: UnlockResultMessage): void;
 }
 
 const messenger = defineExtensionMessaging<ExtensionProtocolMap>();

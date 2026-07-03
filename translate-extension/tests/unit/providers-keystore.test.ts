@@ -148,6 +148,52 @@ describe('providers and keystore', () => {
     });
   });
 
+  it('deepseek provider throws PROVIDER_KEY_MISSING when key not configured', async () => {
+    const { deepseekProvider } = await import('@/core/translators/deepseek');
+    const iterator = deepseekProvider.translate(
+      [{ id: '1', text: 'hello' }],
+      { sourceLang: 'en', targetLang: 'zh-CN', signal: new AbortController().signal },
+    )[Symbol.asyncIterator]();
+    await expect(iterator.next()).rejects.toMatchObject({
+      code: 'PROVIDER_KEY_MISSING',
+    });
+  });
+
+  it('deepseek provider calls Anthropic-compatible messages API', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          content: [{ type: 'text', text: '你好' }],
+        }),
+      ),
+    );
+    const { deepseekProvider } = await import('@/core/translators/deepseek');
+    const chunks = await collect(
+      deepseekProvider.translate(
+        [{ id: '1', text: 'hello' }],
+        {
+          sourceLang: 'en',
+          targetLang: 'zh-CN',
+          signal: new AbortController().signal,
+          apiKey: 'sk-test',
+        },
+      ),
+    );
+    expect(chunks[0]).toEqual({ id: '1', text: '你好', done: true });
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://api.deepseek.com/anthropic/v1/messages',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'x-api-key': 'sk-test',
+          'anthropic-version': '2023-06-01',
+        }),
+      }),
+    );
+    const requestBody = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body));
+    expect(requestBody.model).toBe('deepseek-v4-pro');
+  });
+
   it('provider translate honors abort signal', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(
       (_url: RequestInfo | URL, init?: RequestInit) =>

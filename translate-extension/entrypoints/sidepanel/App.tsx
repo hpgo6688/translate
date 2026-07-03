@@ -57,7 +57,7 @@ function App() {
       { id: 'free-service', label: 'Free Translation Service', group: 'free', icon: '⭐', providerId: 'google' },
       { id: 'google', label: 'Google Translate', group: 'free', icon: '🌐', providerId: 'google' },
       { id: 'microsoft', label: 'Microsoft Translator', group: 'free', icon: '🪟', disabled: true },
-      { id: 'deepseek', label: 'DeepSeek-V3.2', group: 'pro', badge: 'Pro', icon: '🌀', disabled: true },
+      { id: 'deepseek', label: 'DeepSeek v4 Pro', group: 'pro', badge: 'Pro', icon: '🌀', providerId: 'deepseek' },
       { id: 'llm', label: 'LiteLLM (Custom)', group: 'pro', badge: 'Pro', icon: '◎', providerId: 'llm' },
       { id: 'claude', label: 'Claude Haiku 4.5', group: 'pro', badge: 'Pro', icon: '✺', disabled: true },
       { id: 'gemini', label: 'Gemini 3 Flash', group: 'pro', badge: 'Pro', icon: '✦', disabled: true },
@@ -80,6 +80,9 @@ function App() {
   const selectedServiceId = useMemo(() => {
     if (providerId === 'deepl') {
       return 'deepl';
+    }
+    if (providerId === 'deepseek') {
+      return 'deepseek';
     }
     if (providerId === 'llm') {
       return 'llm';

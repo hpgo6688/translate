@@ -189,6 +189,7 @@ function isSelectionMode(value: unknown): value is 'direct' | 'icon' | 'mini-ico
 const SELECTION_CARD_PROVIDER_OPTIONS: Array<{ id: string; label: string; tier: 'free' | 'pro' }> = [
   { id: 'google', label: 'Free Translation Service', tier: 'free' },
   { id: 'deepl', label: 'DeepL Pro', tier: 'pro' },
+  { id: 'deepseek', label: 'DeepSeek v4 Pro', tier: 'pro' },
 ];
 
 function getSelectionProviderLabel(providerId: string): string {

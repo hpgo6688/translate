@@ -80,6 +80,7 @@ function App() {
     () => [
       { id: 'google', label: 'Google' },
       { id: 'deepl', label: 'DeepL' },
+      { id: 'deepseek', label: 'DeepSeek v4 Pro' },
       { id: 'llm', label: 'LiteLLM' },
     ],
     [],
@@ -218,7 +219,9 @@ function App() {
                     ? 'Free Translation Service'
                     : provider.id === 'deepl'
                       ? 'DeepL Pro'
-                      : 'LiteLLM Custom'}
+                      : provider.id === 'deepseek'
+                        ? 'DeepSeek v4 Pro'
+                        : 'LiteLLM Custom'}
                 </option>
               ))}
             </select>

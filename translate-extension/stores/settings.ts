@@ -104,6 +104,7 @@ const initialSettings: SettingsState = {
   providers: {
     google: { enabled: true, requiresKey: false },
     deepl: { enabled: false, requiresKey: true },
+    deepseek: { enabled: true, requiresKey: true },
     llm: { enabled: false, requiresKey: false },
   },
   liteLlm: {

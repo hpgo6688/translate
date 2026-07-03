@@ -1,9 +1,15 @@
 import { type TranslateProvider } from '@/core/translators/base';
+import { deepseekProvider } from '@/core/translators/deepseek';
 import { deeplFreeProvider } from '@/core/translators/deepl';
 import { googleProvider } from '@/core/translators/google';
 import { liteLlmProvider } from '@/core/translators/litellm';
 
-const providers: TranslateProvider[] = [googleProvider, deeplFreeProvider, liteLlmProvider];
+const providers: TranslateProvider[] = [
+  googleProvider,
+  deeplFreeProvider,
+  deepseekProvider,
+  liteLlmProvider,
+];
 
 export const providerRegistry = new Map(providers.map((provider) => [provider.id, provider]));
 

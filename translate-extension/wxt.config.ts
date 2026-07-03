@@ -6,6 +6,10 @@ export default defineConfig({
   manifestVersion: 3,
   modules: ['@wxt-dev/module-react'],
   manifest: {
+    name: 'Translate',
+    action: {
+      default_title: 'Translate',
+    },
     permissions: ['storage', 'tabs', 'activeTab', 'sidePanel'],
     side_panel: {
       default_path: 'sidepanel.html',

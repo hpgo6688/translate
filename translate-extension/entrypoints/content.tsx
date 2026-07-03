@@ -33,9 +33,9 @@ const paragraphById = new Map<string, ParagraphState>();
 const paragraphIdByElement = new WeakMap<HTMLElement, string>();
 const hoverRequestById = new Map<string, HTMLElement>();
 const hoverIdByElement = new WeakMap<HTMLElement, string>();
-const hoverLoadingById = new Map<string, HTMLSpanElement>();
-const hoverLoadingTimeoutById = new Map<string, number>();
-const hoverLoadingPositionRestore = new WeakMap<HTMLElement, string>();
+const paragraphLoadingById = new Map<string, HTMLSpanElement>();
+const paragraphLoadingTimeoutById = new Map<string, number>();
+const pendingParagraphIds = new Set<string>();
 const selectionRequestById = new Map<string, { x: number; y: number }>();
 let selectionActionButton: HTMLButtonElement | null = null;
 let selectionCardElement: HTMLDivElement | null = null;
@@ -51,7 +51,7 @@ const translatedParagraphIds = new Set<string>();
 let currentMode: DisplayMode = 'below';
 let hoverRequestSeq = 0;
 let selectionRequestSeq = 0;
-let hoverLoadingStyleReady = false;
+let paragraphLoadingStyleReady = false;
 let selectionCardStyleReady = false;
 let providerConfigured = false;
 let refreshFloatingButton: (() => void) | null = null;
@@ -116,6 +116,11 @@ async function scanAndQueue(config: {
       if (!item) {
         return;
       }
+      if (translatedParagraphIds.has(item.id) || pendingParagraphIds.has(item.id)) {
+        return;
+      }
+      pendingParagraphIds.add(item.id);
+      attachParagraphLoading(item.element, item.id);
       void sendMessage('TRANSLATE_BATCH', {
         sourceLang: config.sourceLang,
         targetLang: config.targetLang,
@@ -881,76 +886,59 @@ function resolveHoverTarget(target: EventTarget | null): HTMLElement | null {
   return target;
 }
 
-function ensureHoverLoadingStyle(): void {
-  if (hoverLoadingStyleReady) {
+function ensureParagraphLoadingStyle(): void {
+  if (paragraphLoadingStyleReady) {
     return;
   }
   const style = document.createElement('style');
   style.textContent = `
-    @keyframes translate-ext-hover-spin {
+    @keyframes translate-ext-paragraph-spin {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
     }
   `;
   document.head.append(style);
-  hoverLoadingStyleReady = true;
+  paragraphLoadingStyleReady = true;
 }
 
-function attachHoverLoading(target: HTMLElement, id: string): void {
-  ensureHoverLoadingStyle();
-  detachHoverLoading(id);
-  if (getComputedStyle(target).position === 'static') {
-    hoverLoadingPositionRestore.set(target, target.style.position);
-    target.style.position = 'relative';
-  }
+function attachParagraphLoading(target: HTMLElement, id: string): void {
+  ensureParagraphLoadingStyle();
+  detachParagraphLoading(id);
   const spinner = document.createElement('span');
-  spinner.setAttribute('data-translate-hover-loading', id);
+  spinner.setAttribute('data-translate-paragraph-loading', id);
   spinner.setAttribute('aria-hidden', 'true');
-  spinner.style.position = 'absolute';
-  spinner.style.right = '-6px';
-  spinner.style.top = '50%';
+  spinner.style.display = 'inline-block';
   spinner.style.width = '12px';
   spinner.style.height = '12px';
-  spinner.style.marginTop = '-6px';
+  spinner.style.marginLeft = '6px';
+  spinner.style.verticalAlign = 'middle';
   spinner.style.border = '2px solid rgba(148, 163, 184, 0.45)';
   spinner.style.borderTopColor = '#475569';
   spinner.style.borderRadius = '9999px';
   spinner.style.pointerEvents = 'none';
-  spinner.style.zIndex = '2147483647';
-  spinner.style.animation = 'translate-ext-hover-spin 0.8s linear infinite';
+  spinner.style.animation = 'translate-ext-paragraph-spin 0.8s linear infinite';
   target.append(spinner);
-  hoverLoadingById.set(id, spinner);
+  paragraphLoadingById.set(id, spinner);
   const timeoutId = window.setTimeout(() => {
-    detachHoverLoading(id);
+    detachParagraphLoading(id);
+    pendingParagraphIds.delete(id);
     hoverRequestById.delete(id);
   }, 15000);
-  hoverLoadingTimeoutById.set(id, timeoutId);
+  paragraphLoadingTimeoutById.set(id, timeoutId);
 }
 
-function detachHoverLoading(id: string): void {
-  const spinner = hoverLoadingById.get(id);
-  const timeoutId = hoverLoadingTimeoutById.get(id);
+function detachParagraphLoading(id: string): void {
+  const spinner = paragraphLoadingById.get(id);
+  const timeoutId = paragraphLoadingTimeoutById.get(id);
   if (timeoutId !== undefined) {
     window.clearTimeout(timeoutId);
-    hoverLoadingTimeoutById.delete(id);
+    paragraphLoadingTimeoutById.delete(id);
   }
   if (!spinner) {
     return;
   }
-  const host = spinner.parentElement;
   spinner.remove();
-  hoverLoadingById.delete(id);
-  if (!host) {
-    return;
-  }
-  const nextRestore = hoverLoadingPositionRestore.get(host);
-  if (nextRestore === undefined) {
-    return;
-  }
-  if (!host.querySelector('[data-translate-hover-loading]')) {
-    host.style.position = nextRestore;
-    hoverLoadingPositionRestore.delete(host);
-  }
+  paragraphLoadingById.delete(id);
 }
 
 export default defineContentScript({
@@ -1138,7 +1126,7 @@ export default defineContentScript({
         return;
       }
       if (activeHoverTarget === currentHoverTarget && activeHoverRequestId) {
-        detachHoverLoading(activeHoverRequestId);
+        detachParagraphLoading(activeHoverRequestId);
         hoverRequestById.delete(activeHoverRequestId);
         removeTranslation({
           id: activeHoverRequestId,
@@ -1162,7 +1150,7 @@ export default defineContentScript({
         return;
       }
       hoverRequestById.set(requestId, currentHoverTarget);
-      attachHoverLoading(currentHoverTarget, requestId);
+      attachParagraphLoading(currentHoverTarget, requestId);
       activeHoverTarget = currentHoverTarget;
       activeHoverRequestId = requestId;
       void sendMessage('TRANSLATE_BATCH', {
@@ -1348,7 +1336,7 @@ export default defineContentScript({
       const hoverTarget = hoverRequestById.get(message.payload.id);
       if (hoverTarget) {
         hoverRequestById.delete(message.payload.id);
-        detachHoverLoading(message.payload.id);
+        detachParagraphLoading(message.payload.id);
         void injectTranslation(ctx, {
           id: message.payload.id,
           element: hoverTarget,
@@ -1368,6 +1356,8 @@ export default defineContentScript({
         if (!target) {
           return;
         }
+        detachParagraphLoading(target.id);
+        pendingParagraphIds.delete(target.id);
         void injectTranslation(ctx, {
           id: target.id,
           element: target.element,
@@ -1386,9 +1376,10 @@ export default defineContentScript({
       refreshFloatingButton = null;
       stopStyleSync();
       stopObserve();
-      for (const id of hoverLoadingById.keys()) {
-        detachHoverLoading(id);
+      for (const id of paragraphLoadingById.keys()) {
+        detachParagraphLoading(id);
       }
+      pendingParagraphIds.clear();
       document.removeEventListener('mousemove', pointerListener);
       document.removeEventListener('keydown', keydownListener);
       document.removeEventListener('mouseup', mouseupListener);

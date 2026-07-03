@@ -7,6 +7,8 @@ import { applyStyleVariables, defaultTranslationStyle, listenStyleChanges } from
 import { observeInViewport } from '@/core/dom/viewport';
 import { collectTranslatableParagraphs } from '@/core/dom/walker';
 import { mountFloatingButton } from '@/entrypoints/content/floating-button';
+import { fillProviderSetupBody } from '@/entrypoints/content/provider-setup-ui';
+import { providerKeyStore } from '@/core/keystore/provider-keys';
 import { resolveProviderId } from '@/core/translators';
 import { sendMessage } from '@/utils/messaging';
 
@@ -51,6 +53,8 @@ let hoverRequestSeq = 0;
 let selectionRequestSeq = 0;
 let hoverLoadingStyleReady = false;
 let selectionCardStyleReady = false;
+let providerConfigured = false;
+let refreshFloatingButton: (() => void) | null = null;
 
 type RuntimeMessage = {
   type: string;
@@ -95,6 +99,9 @@ async function scanAndQueue(config: {
   targetLang: string;
   providerId: string;
 }) {
+  if (!providerConfigured) {
+    return () => {};
+  }
   const candidates = collectTranslatableParagraphs(document);
   const paragraphs = await assignParagraphIds(candidates);
   for (const paragraph of paragraphs) {
@@ -282,6 +289,24 @@ function showSelectionTranslation(text: string, x: number, y: number): void {
 
 function showSelectionLoading(x: number, y: number): void {
   showSelectionTranslation('Translating...', x, y);
+}
+
+function showSelectionProviderSetup(x: number, y: number): void {
+  const card = ensureSelectionCard();
+  if (!card || !selectionCardBodyElement) {
+    return;
+  }
+  fillProviderSetupBody(selectionCardBodyElement);
+  card.style.display = 'flex';
+  if (selectionCardPinned) {
+    return;
+  }
+  const width = card.offsetWidth || 360;
+  const height = card.offsetHeight || 170;
+  const maxLeft = Math.max(8, window.innerWidth - width - 8);
+  const maxTop = Math.max(8, window.innerHeight - height - 8);
+  card.style.left = `${Math.max(8, Math.min(maxLeft, x))}px`;
+  card.style.top = `${Math.max(8, Math.min(maxTop, y + 8))}px`;
 }
 
 function updatePinButtonStyle(): void {
@@ -933,6 +958,14 @@ export default defineContentScript({
   allFrames: false,
   cssInjectionMode: 'ui',
   async main(ctx) {
+    await providerKeyStore.init();
+    providerConfigured = await providerKeyStore.hasAnyConfiguredProvider();
+
+    const refreshProviderConfigured = async (): Promise<void> => {
+      providerConfigured = await providerKeyStore.hasAnyConfiguredProvider();
+      refreshFloatingButton?.();
+    };
+
     const initial = await getChrome().storage.sync.get([
       'translationStyle',
       'popupEnabled',
@@ -1026,8 +1059,15 @@ export default defineContentScript({
       }
     });
     const storageListener = (changes: Record<string, { newValue?: unknown }>, areaName: string) => {
+      if (areaName === 'local' && changes.providerKeys) {
+        void refreshProviderConfigured();
+        return;
+      }
       if (areaName !== 'sync') {
         return;
+      }
+      if (changes.providerConfigs || changes.settings) {
+        void refreshProviderConfigured();
       }
       let shouldRescan = false;
       if (isBoolean(changes.popupEnabled?.newValue)) {
@@ -1070,7 +1110,7 @@ export default defineContentScript({
       if (isSelectionMode(changes.popupSelectionMode?.newValue)) {
         popupSelectionMode = changes.popupSelectionMode.newValue;
       }
-      if (shouldRescan && popupEnabled && masterEnabled) {
+      if (shouldRescan && popupEnabled && masterEnabled && providerConfigured) {
         void scanAndQueue({ sourceLang, targetLang, providerId });
       }
     };
@@ -1092,6 +1132,11 @@ export default defineContentScript({
         return;
       }
       event.preventDefault();
+      if (!providerConfigured) {
+        const rect = currentHoverTarget.getBoundingClientRect();
+        showSelectionProviderSetup(rect.left, rect.bottom);
+        return;
+      }
       if (activeHoverTarget === currentHoverTarget && activeHoverRequestId) {
         detachHoverLoading(activeHoverRequestId);
         hoverRequestById.delete(activeHoverRequestId);
@@ -1138,9 +1183,13 @@ export default defineContentScript({
       }
       const range = selection.getRangeAt(0);
       const rect = range.getBoundingClientRect();
+      const anchor = { x: rect.left, y: rect.bottom };
+      if (!providerConfigured) {
+        showSelectionProviderSetup(anchor.x, anchor.y);
+        return;
+      }
       selectionRequestSeq += 1;
       const requestId = `selection-${selectionRequestSeq}`;
-      const anchor = { x: rect.left, y: rect.bottom };
       selectionRequestById.set(requestId, anchor);
       showSelectionLoading(anchor.x, anchor.y);
       void sendMessage('TRANSLATE_BATCH', {
@@ -1256,17 +1305,23 @@ export default defineContentScript({
     document.addEventListener('pointerdown', pointerDownOutsideCardListener, true);
     window.addEventListener('resize', resizeListener);
 
-    await mountFloatingButton(ctx, {
+    const floatingUi = await mountFloatingButton(ctx, {
       onTranslate: () => {
         if (!popupEnabled || !masterEnabled) {
           return;
         }
+        if (!providerConfigured) {
+          showSelectionProviderSetup(window.innerWidth - 280, window.innerHeight - 220);
+          return;
+        }
         void scanAndQueue({ sourceLang, targetLang, providerId });
       },
+      isProviderConfigured: () => providerConfigured,
     });
+    refreshFloatingButton = floatingUi.refresh;
 
     const stopObserve = observeDomChanges(document.documentElement, () => {
-      if (!popupEnabled || !masterEnabled) {
+      if (!popupEnabled || !masterEnabled || !providerConfigured) {
         return;
       }
       void scanAndQueue({ sourceLang, targetLang, providerId });
@@ -1275,6 +1330,10 @@ export default defineContentScript({
     getChrome().runtime.onMessage.addListener((message) => {
       if (message?.type === 'POPUP_TRANSLATE_START') {
         if (!popupEnabled || !masterEnabled) {
+          return;
+        }
+        if (!providerConfigured) {
+          showSelectionProviderSetup(window.innerWidth - 280, window.innerHeight - 220);
           return;
         }
         void scanAndQueue({ sourceLang, targetLang, providerId });
@@ -1319,11 +1378,12 @@ export default defineContentScript({
       }
     });
 
-    if (popupEnabled && masterEnabled) {
+    if (popupEnabled && masterEnabled && providerConfigured) {
       void scanAndQueue({ sourceLang, targetLang, providerId });
     }
 
     return () => {
+      refreshFloatingButton = null;
       stopStyleSync();
       stopObserve();
       for (const id of hoverLoadingById.keys()) {

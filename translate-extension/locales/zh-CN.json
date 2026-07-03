@@ -6,5 +6,8 @@
   "popup.enableCurrentTab": "启用当前标签页翻译",
   "options.title": "设置",
   "unlock.title": "解锁 Provider 密钥",
-  "unlock.password": "主密码"
+  "unlock.password": "主密码",
+  "providerSetup.banner": "请先配置翻译服务提供商。",
+  "providerSetup.action": "打开设置",
+  "providerSetup.error": "尚未配置翻译服务提供商，请在设置中添加 API Key。"
 }

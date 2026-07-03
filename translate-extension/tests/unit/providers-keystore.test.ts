@@ -226,4 +226,29 @@ describe('providers and keystore', () => {
     expect(providerKeyStore.getProviderConfig('deepseek')?.enabled).toBe(false);
     providerKeyStore.dispose();
   });
+
+  it('reports provider setup status from keys and enabled config', async () => {
+    const { providerKeyStore } = await import('@/core/keystore/provider-keys');
+    await providerKeyStore.init();
+
+    await expect(providerKeyStore.isProviderConfigured('deepseek')).resolves.toBe(false);
+    await expect(providerKeyStore.hasAnyConfiguredProvider()).resolves.toBe(false);
+
+    await providerKeyStore.setProviderKey('deepseek', 'secret-key');
+    await expect(providerKeyStore.isProviderConfigured('deepseek')).resolves.toBe(true);
+    await expect(providerKeyStore.hasAnyConfiguredProvider()).resolves.toBe(true);
+
+    await (globalThis as unknown as { chrome: ReturnType<typeof createChromeMock> }).chrome.storage.sync.set(
+      {
+        providerConfigs: {
+          deepseek: { enabled: false, requiresKey: true },
+        },
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await expect(providerKeyStore.isProviderConfigured('deepseek')).resolves.toBe(false);
+    await expect(providerKeyStore.hasAnyConfiguredProvider()).resolves.toBe(false);
+
+    providerKeyStore.dispose();
+  });
 });

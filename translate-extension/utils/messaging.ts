@@ -19,10 +19,15 @@ export interface SettingsChangedMessage {
   keys: string[];
 }
 
+export interface OpenOptionsPageMessage {
+  hash?: string;
+}
+
 export interface ExtensionProtocolMap {
   TRANSLATE_BATCH(data: TranslateBatchMessage): { accepted: boolean };
   TRANSLATE_TEXT(data: TranslateTextMessage): { text: string };
   SETTINGS_CHANGED(data: SettingsChangedMessage): void;
+  OPEN_OPTIONS_PAGE(data: OpenOptionsPageMessage): { opened: boolean };
 }
 
 const messenger = defineExtensionMessaging<ExtensionProtocolMap>();

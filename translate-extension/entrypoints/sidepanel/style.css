@@ -475,3 +475,36 @@ body {
 .rail-spacer {
   flex: 1;
 }
+
+.provider-setup-banner {
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.provider-setup-banner--sidepanel {
+  margin-bottom: 12px;
+  background: #2f2640;
+  border: 1px solid #6b4f1d;
+}
+
+.provider-setup-banner__text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #f5d08a;
+}
+
+.provider-setup-banner__action {
+  align-self: flex-start;
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #f5b942;
+  color: #1a1408;
+  cursor: pointer;
+}

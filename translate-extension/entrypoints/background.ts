@@ -14,6 +14,10 @@ const queue = new OrchestratorQueue(4, 50, 10);
 type ExtensionChrome = {
   tabs: {
     sendMessage: (tabId: number, message: unknown) => Promise<void>;
+    create: (options: { url: string }) => Promise<unknown>;
+  };
+  runtime: {
+    getURL: (path: string) => string;
   };
 };
 
@@ -147,6 +151,37 @@ async function translateTextViaPipeline(input: TranslateTextMessage): Promise<st
 export default defineBackground(() => {
   void providerKeyStore.init();
 
+  const extensionChrome = (globalThis as {
+    chrome?: {
+      runtime?: {
+        onInstalled?: {
+          addListener: (
+            listener: (details: { reason: string }) => void,
+          ) => void;
+        };
+        getURL?: (path: string) => string;
+      };
+      tabs?: {
+        create?: (options: { url: string }) => void;
+      };
+    };
+  }).chrome;
+
+  extensionChrome?.runtime?.onInstalled?.addListener((details) => {
+    if (details.reason !== 'install') {
+      return;
+    }
+
+    void (async () => {
+      const configured = await providerKeyStore.hasAnyConfiguredProvider();
+      if (!configured) {
+        const optionsUrl =
+          extensionChrome.runtime?.getURL?.('options.html#providers') ?? 'options.html#providers';
+        extensionChrome.tabs?.create?.({ url: optionsUrl });
+      }
+    })();
+  });
+
   onMessage('TRANSLATE_BATCH', async (message) => {
     try {
       const maybeSender = message as unknown as { sender?: { tab?: { id?: number } } };
@@ -166,5 +201,12 @@ export default defineBackground(() => {
     } catch (error) {
       throw mapTranslationError(error);
     }
+  });
+
+  onMessage('OPEN_OPTIONS_PAGE', async (message) => {
+    const normalizedHash = message.data.hash?.replace(/^#/, '') ?? 'general';
+    const optionsUrl = getChrome().runtime.getURL(`options.html#${normalizedHash}`);
+    await getChrome().tabs.create({ url: optionsUrl });
+    return { opened: true };
   });
 });

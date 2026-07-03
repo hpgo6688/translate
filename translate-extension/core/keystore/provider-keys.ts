@@ -1,3 +1,5 @@
+import { listProviders } from '@/core/translators';
+
 const PROVIDER_KEY_BAG = 'providerKeys';
 const PROVIDER_CONFIG_KEY = 'providerConfigs';
 const SETTINGS_KEY = 'settings';
@@ -94,6 +96,34 @@ export class ProviderKeyStore {
     const bag = await this.getKeyBag();
     delete bag[providerId];
     await getChrome().storage.local.set({ [PROVIDER_KEY_BAG]: bag });
+  }
+
+  async isProviderConfigured(providerId: string): Promise<boolean> {
+    const provider = listProviders().find((item) => item.id === providerId);
+    if (!provider) {
+      return false;
+    }
+
+    const config = this.getProviderConfig(providerId);
+    if (config && !config.enabled) {
+      return false;
+    }
+
+    if (!provider.requiresKey) {
+      return true;
+    }
+
+    const key = await this.getProviderKey(providerId);
+    return Boolean(key);
+  }
+
+  async hasAnyConfiguredProvider(): Promise<boolean> {
+    for (const provider of listProviders()) {
+      if (await this.isProviderConfigured(provider.id)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private async getKeyBag(): Promise<ProviderKeyRecord> {

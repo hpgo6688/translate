@@ -1,12 +1,19 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
+import { providerSetupErrorMessage, ProviderSetupBanner } from '@/components/provider-setup-banner';
 import { LanguageSelect } from '@/components/ui/language-select';
+import { useProviderConfigured } from '@/hooks/use-provider-configured';
 import { usePopupStore } from '@/stores/popup';
+import { openOptionsPage } from '@/utils/open-options-page';
 import { sendMessage } from '@/utils/messaging';
 import { requestSidePanelTranslation } from './actions';
 
 function App() {
+  const { t } = useTranslation();
   const { providerId } = usePopupStore();
+  const providerConfigured = useProviderConfigured();
+  const needsProviderSetup = providerConfigured === false;
   const [sourceLang, setSourceLang] = useState('auto');
   const [targetLang, setTargetLang] = useState('zh-CN');
   const [sourceText, setSourceText] = useState('');
@@ -32,6 +39,8 @@ function App() {
               </span>
             </div>
           </header>
+
+          {needsProviderSetup ? <ProviderSetupBanner variant="sidepanel" /> : null}
 
           <section className="translator-card">
             <div className="lang-row">
@@ -82,8 +91,12 @@ function App() {
               <button
                 type="button"
                 className="translate-btn"
-                disabled={sourceText.trim().length === 0 || isTranslating}
+                disabled={sourceText.trim().length === 0 || isTranslating || needsProviderSetup}
                 onClick={() => {
+                  if (needsProviderSetup) {
+                    void openOptionsPage('providers');
+                    return;
+                  }
                   void (async () => {
                     setError(null);
                     setResultText('');
@@ -97,7 +110,12 @@ function App() {
                       });
                       setResultText(translatedText);
                     } catch (nextError) {
-                      setError((nextError as Error).message || 'Failed to translate');
+                      const message = (nextError as Error).message;
+                      setError(
+                        message === 'CONFIG_MISSING'
+                          ? providerSetupErrorMessage(t)
+                          : message || 'Failed to translate',
+                      );
                     } finally {
                       setIsTranslating(false);
                     }

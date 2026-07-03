@@ -6,5 +6,8 @@
   "popup.enableCurrentTab": "Enable for current tab",
   "options.title": "Settings",
   "unlock.title": "Unlock provider keys",
-  "unlock.password": "Master password"
+  "unlock.password": "Master password",
+  "providerSetup.banner": "Configure a translation provider to get started.",
+  "providerSetup.action": "Open settings",
+  "providerSetup.error": "Translation provider is not configured. Please add an API key in settings."
 }

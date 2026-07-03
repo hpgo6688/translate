@@ -1,4 +1,4 @@
-import { type FormEventHandler, useEffect, useMemo, useState } from 'react';
+import { type FormEventHandler, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 
@@ -51,6 +51,7 @@ export default function App() {
   const [deepseekApiKey, setDeepseekApiKey] = useState(
     () => settings.providers.deepseek?.apiKey ?? '',
   );
+  const deepseekApiKeyReadyRef = useRef(false);
 
   const nav = useMemo(
     () =>
@@ -93,6 +94,42 @@ export default function App() {
   useEffect(() => {
     setDeepseekApiKey(settings.providers.deepseek?.apiKey ?? '');
   }, [settings.providers.deepseek?.apiKey]);
+
+  const saveProviderApiKey = async (providerId: string, apiKey: string): Promise<void> => {
+    const currentSettings = useSettingsStore.getState();
+    const config = currentSettings.providers[providerId];
+    if (!config) {
+      return;
+    }
+    const normalizedKey = apiKey.trim();
+    if (normalizedKey === (config.apiKey ?? '').trim()) {
+      return;
+    }
+    const ok = await currentSettings.update({
+      providers: {
+        ...currentSettings.providers,
+        [providerId]: {
+          ...config,
+          apiKey: normalizedKey,
+        },
+      },
+    });
+    reportSaveResult(ok);
+  };
+
+  useEffect(() => {
+    if (!deepseekApiKeyReadyRef.current) {
+      deepseekApiKeyReadyRef.current = true;
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void saveProviderApiKey('deepseek', deepseekApiKey);
+    }, 500);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [deepseekApiKey]);
+
   useEffect(() => {
     const syncFromHash = (): void => {
       setRoute(normalizeRouteFromHash(window.location.hash));
@@ -290,44 +327,23 @@ export default function App() {
                     />
                   </div>
                   {config.requiresKey && (
-                    <div className="mt-2 flex gap-2">
+                    <div className="mt-2">
                       <input
                         type="password"
                         placeholder={`${providerId} api key`}
-                        className="flex-1 rounded border p-2"
+                        className="w-full rounded border p-2"
                         value={providerId === 'deepseek' ? deepseekApiKey : ''}
                         onChange={(event) => {
                           if (providerId === 'deepseek') {
                             setDeepseekApiKey(event.target.value);
                           }
                         }}
-                      />
-                      <button
-                        type="button"
-                        className="rounded border px-3 py-1"
-                        onClick={() => {
-                          runAsync(async () => {
-                            const apiKey = deepseekApiKey.trim();
-                            if (!apiKey) {
-                              setSaveNotice('API key cannot be empty.');
-                              setTimeout(() => setSaveNotice(null), 1600);
-                              return;
-                            }
-                            const ok = await settings.update({
-                              providers: {
-                                ...settings.providers,
-                                [providerId]: {
-                                  ...config,
-                                  apiKey,
-                                },
-                              },
-                            });
-                            reportSaveResult(ok);
-                          });
+                        onBlur={() => {
+                          if (providerId === 'deepseek') {
+                            void saveProviderApiKey('deepseek', deepseekApiKey);
+                          }
                         }}
-                      >
-                        Save Key
-                      </button>
+                      />
                     </div>
                   )}
                 </div>

@@ -1,9 +1,12 @@
 import { type ReactNode, useMemo, useState } from 'react';
 
+import { ProviderSetupBanner } from '@/components/provider-setup-banner';
 import { PopupSwitch } from '@/components/ui/popup-switch';
 import { SearchableSelect, type SelectOption } from '@/components/ui/searchable-select';
 import { openExtensionSidePanel } from '@/entrypoints/sidepanel/actions';
+import { useProviderConfigured } from '@/hooks/use-provider-configured';
 import { usePopupStore } from '@/stores/popup';
+import { openOptionsPage } from '@/utils/open-options-page';
 import './App.css';
 
 type PreferenceRowProps = {
@@ -14,18 +17,7 @@ type PreferenceRowProps = {
 };
 
 function openGeneralOptionsPage(): void {
-  const extensionChrome = (globalThis as {
-    chrome?: {
-      runtime?: { getURL?: (path: string) => string };
-      tabs?: { create?: (options: { url: string }) => void };
-    };
-  }).chrome;
-  const optionsUrl = extensionChrome?.runtime?.getURL?.('options.html#general') ?? '/options.html#general';
-  if (extensionChrome?.tabs?.create) {
-    extensionChrome.tabs.create({ url: optionsUrl });
-    return;
-  }
-  window.open(optionsUrl, '_blank');
+  void openOptionsPage('general');
 }
 
 function PreferenceRow({ label, trailing, disabled = false, badge }: PreferenceRowProps) {
@@ -59,6 +51,8 @@ function App() {
     setSelectionEnabled,
     setSelectionMode,
   } = usePopupStore();
+  const providerConfigured = useProviderConfigured();
+  const needsProviderSetup = providerConfigured === false;
 
   const sourceLangOptions = useMemo<SelectOption[]>(
     () => [
@@ -101,6 +95,8 @@ function App() {
           </button>
         </div>
       </section>
+
+      {needsProviderSetup ? <ProviderSetupBanner variant="popup" /> : null}
 
       <section className="p-[10px] popup-primary-flow">
         <div className="language-pair">
@@ -153,6 +149,10 @@ function App() {
           <button
             className="translate-cta"
             onClick={() => {
+              if (needsProviderSetup) {
+                void openOptionsPage('providers');
+                return;
+              }
               void setEnabled(true);
             }}
           >

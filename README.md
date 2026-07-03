@@ -1,3 +1,8 @@
+## Install
+
+![alt text](./screenshots/image-0.webp)
+
+## Guide
 ![Screenshot 1](./screenshots/image-1.webp)
 
 ![Screenshot 2](./screenshots/image-2.webp)
@@ -11,3 +16,4 @@
 ![Screenshot 6](./screenshots/image-6.webp)
 
 ![Screenshot 7](./screenshots/image-7.webp)
+
